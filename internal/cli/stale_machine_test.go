@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -199,7 +200,41 @@ func TestMachineOutputReadsKeyOnlyBesideDecode(t *testing.T) {
 	if machineOutput(newDescribeCommand(services), []string{"1", "-k", "overlays/prod", "-o", "wide"}) {
 		t.Error("kubectl's -k read as --decode's key")
 	}
-	if !machineOutput(newSecretCommand(services, "secret", nil), []string{"1", "--decode", "-k", "token"}) {
+	if !parsedMachineOutput(t, newSecretCommand(services, "secret", nil), "1", "--decode", "-k", "token") {
 		t.Error("--decode -k not read as raw output")
+	}
+}
+
+// parsedMachineOutput is machineOutput on a command that parses kubectl's
+// flags itself, called the way withRefresh calls it: after cobra parsed argv,
+// with the positional arguments left over.
+func parsedMachineOutput(t *testing.T, cmd *cobra.Command, args ...string) bool {
+	t.Helper()
+	if err := cmd.ParseFlags(args); err != nil {
+		t.Fatalf("ParseFlags(%q): %v", args, err)
+	}
+	return machineOutput(cmd, cmd.Flags().Args())
+}
+
+// On a command that parses kubectl's flags, the format is read from the argv
+// kubectl gets — including after "--", which on such a command is kubectl's
+// too — and a stale index never puts a listing where a document was expected.
+func TestMachineOutputOnAParsingCommand(t *testing.T) {
+	services := argvServices(t)
+	for _, tc := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"1"}, false},
+		{[]string{"1", "-o", "wide"}, false},
+		{[]string{"1", "-o", "json"}, true},
+		{[]string{"1", "-ojsonpath={.data}"}, true},
+		{[]string{"1", "--", "-o", "yaml"}, true},
+		{[]string{"1", "--decode"}, false},
+		{[]string{"1", "--decode", "--key="}, true},
+	} {
+		if got := parsedMachineOutput(t, newSecretCommand(services, "secret", nil), tc.args...); got != tc.want {
+			t.Errorf("kx secret %s: machineOutput = %v, want %v", joinArgs(tc.args), got, tc.want)
+		}
 	}
 }

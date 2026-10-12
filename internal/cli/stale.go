@@ -61,6 +61,17 @@ func machineOutput(c *cobra.Command, args []string) bool {
 	if flag := c.Flags().Lookup("json"); flag != nil && flag.Changed {
 		return true
 	}
+	// A command that parses kubectl's flags from the table reads them from
+	// the argv kubectl will get, everything after "--" included: on such a
+	// command that is kubectl's too. Its own --decode and --key were parsed
+	// by cobra and are read back the same way.
+	if recorded := recordedKubectlArgs(c); recorded != nil {
+		if decode, _ := c.Flags().GetBool("decode"); decode && c.Flags().Changed("key") {
+			return true
+		}
+		_, forward := kubectlArgv(c, args, recorded)
+		return !printsTable(forward)
+	}
 	if !c.DisableFlagParsing {
 		return false
 	}

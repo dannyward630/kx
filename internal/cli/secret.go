@@ -310,33 +310,6 @@ func decodeNamespace(services Services, command SecretCommand, extra []string, m
 	return nil
 }
 
-// secretFlags pulls the flags `get` and `secret` share out of the raw
-// arguments. See passthrough.go for why cobra can't do this.
-func secretFlags(args []string) ([]string, getOptions, error) {
-	options := getOptions{}
-	match, rest, err := extractString(args, "--match", "-m")
-	if err != nil {
-		return nil, options, err
-	}
-	options.Match = match
-
-	options.Decode, rest = extractBool(rest, "--decode")
-	options.Yes, rest = extractBool(rest, "--yes", "-y")
-
-	// Presence, not emptiness: `-k ""` asks for a key that cannot exist, and
-	// must fail as a missing key rather than silently widening into a dump of
-	// every value in the Secret.
-	hasKey := hasFlag(rest, "--key", "-k")
-	key, rest, err := extractString(rest, "--key", "-k")
-	if err != nil {
-		return nil, options, err
-	}
-	if hasKey {
-		options.Key, options.HasKey = key, true
-	}
-	return rest, options, nil
-}
-
 func newSecretCommand(services Services, use string, aliases []string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     use + " [index]... [kubectl flags]",
@@ -344,32 +317,19 @@ func newSecretCommand(services Services, use string, aliases []string) *cobra.Co
 		Aliases: aliases,
 		Long:    "Lists Secrets exactly as kx get does. With --decode, prints an indexed Secret's data in plaintext, or every Secret in the namespace when no index is given.",
 		Example: "  kx secret\n  kx secret 1 --decode\n  kx secret 1 --decode -k tls.crt\n  kx secret 1..3\n  kx secret 3..",
-		// Everything not a kx flag belongs to kubectl.
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			rest, options, err := secretFlags(rest)
-			if err != nil {
-				return err
-			}
-			return runGet(services, "secret", rest, options)
-		},
 	}
-	// Registered so they appear in the command's help; parsing is by hand.
-	cmd.Flags().StringP("match", "m", "", matchUsage)
-	cmd.Flags().Bool("decode", false,
-		"Show Secret data in plaintext; every Secret in the namespace when no index is given")
-	cmd.Flags().StringP("key", "k", "", "With --decode, print only this key's value")
-	cmd.Flags().BoolP("yes", "y", false,
-		"Skip the confirmation prompt for a namespace-wide --decode")
-	// Pure kubectl passthrough, parsed by hand like every other flag here —
-	// registered only so they appear in --help instead of vanishing.
-	cmd.Flags().StringP("namespace", "n", "", "Namespace to list from; defaults to the current namespace")
-	cmd.Flags().BoolP("all-namespaces", "A", false, "List across every namespace; each row is indexed and carries its own namespace")
-	registerFormatFlags(cmd)
-	registerWatchFlag(cmd)
+	// kubectl get's flags, as kx get takes them: kx secret is kubectl get
+	// secret.
+	kubectlFlags := registerGetFlags(cmd)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		options, err := getOptionsFrom(cmd)
+		if err != nil {
+			return err
+		}
+		// The indexes lead, as runGet reads them, then kubectl's flags.
+		rest := append(positional[:len(positional):len(positional)], forward...)
+		return runGet(services, "secret", rest, options)
+	}
 	return cmd
 }
