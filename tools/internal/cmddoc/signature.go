@@ -56,7 +56,9 @@ func Signature(cmd *cobra.Command) string {
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		// Inherited flags are global (--no-color) and belong on the root's help,
 		// not on every row of the table.
-		if flag.Hidden || flag.Name == "help" || cmd.InheritedFlags().Lookup(flag.Name) != nil {
+		// kubectl's own flags are what the placeholder below stands for.
+		if flag.Hidden || flag.Name == "help" || cmd.InheritedFlags().Lookup(flag.Name) != nil ||
+			cli.IsKubectlFlag(flag) {
 			return
 		}
 		parts = append(parts, FlagToken(flag))

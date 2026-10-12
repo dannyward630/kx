@@ -244,8 +244,16 @@ func newDescribeCommand(services Services) *cobra.Command {
 // problem, since "@api" is a perfectly well-formed mark reference. Whether
 // the name after '@' is any good is parseRefs's question, same as an
 // out-of-range index or a malformed range.
+//
+// A flag ends the run whatever it contains. No index begins with "-", and a
+// flag's value can legitimately hold "..": `kx logs 1 --since=..` and kx get's
+// forwarded `--output=jsonpath={..metadata.name}` were each read as a
+// malformed range.
 func splitLeadingIndexes(args []string) (indexes, rest []string) {
 	for i, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			return args[:i], args[i:]
+		}
 		if _, err := strconv.Atoi(arg); err != nil &&
 			!strings.Contains(arg, "..") && !strings.HasPrefix(arg, "@") {
 			return args[:i], args[i:]

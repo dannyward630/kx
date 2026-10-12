@@ -239,30 +239,6 @@ func newGetCommand(services Services) *cobra.Command {
 			"kx refuses it beside them rather than printing everything.",
 		Example: "  kx get pods\n  kx get pods -n prod -l app=web\n  kx get deploy -m api\n  kx get pods 1..3\n  kx get pods 3..\n  kx get pods --watch",
 		Args:    minArgs(1),
-		// Everything after `get` belongs to kubectl unless it is one of kx's
-		// own flags, which are removed by hand below. See passthrough.go for
-		// why cobra can't do this.
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			rest, options, err := secretFlags(rest)
-			if err != nil {
-				return err
-			}
-			if len(rest) == 0 {
-				return requiredArgsError(cmd)
-			}
-			// A number here is a row, not a kind — the indexes follow the
-			// resource, they do not replace it.
-			if _, err := strconv.Atoi(rest[0]); err == nil {
-				return numericResourceError(services, rest)
-			}
-			// The resource type leads; everything after is indexes or kubectl's.
-			return runGet(services, rest[0], rest[1:], options)
-		},
 	}
 	cmd.Flags().StringP("match", "m", "", matchUsage)
 	cmd.Flags().Bool("decode", false,
@@ -270,13 +246,62 @@ func newGetCommand(services Services) *cobra.Command {
 	cmd.Flags().StringP("key", "k", "", "With --decode, print only this key's value")
 	cmd.Flags().BoolP("yes", "y", false,
 		"Skip the confirmation prompt for a namespace-wide --decode")
-	// Pure kubectl passthrough, parsed by hand like every other flag here —
-	// registered only so they appear in --help instead of vanishing.
+	// kubectl's flags that kx also reads, registered first so they keep kx's
+	// own usage; registerKubectlFlags gives them kubectl's shape and forwards
+	// them with the rest.
 	cmd.Flags().StringP("namespace", "n", "", "Namespace to list from; defaults to the current namespace")
 	cmd.Flags().BoolP("all-namespaces", "A", false, "List across every namespace; each row is indexed and carries its own namespace")
 	registerFormatFlags(cmd)
 	registerWatchFlag(cmd)
+	kubectlFlags := registerKubectlFlags(cmd, "get")
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		if len(positional) == 0 {
+			return requiredArgsError(cmd)
+		}
+		options, err := getOptionsFrom(cmd)
+		if err != nil {
+			return err
+		}
+		// Positionals first, then kubectl's flags: the indexes follow the
+		// resource, and runGet reads them as the leading run of what is left.
+		rest := append(positional[1:len(positional):len(positional)], forward...)
+		// A number here is a row, not a kind — the indexes follow the
+		// resource, they do not replace it.
+		if _, err := strconv.Atoi(positional[0]); err == nil {
+			return numericResourceError(services, append([]string{positional[0]}, rest...))
+		}
+		return runGet(services, positional[0], rest, options)
+	}
 	return cmd
+}
+
+// getOptionsFrom reads kx get's own flags, which cobra parsed.
+//
+// --key is read by presence, not emptiness: `-k ""` asks for a key that
+// cannot exist, and must fail as a missing key rather than silently widening
+// into a dump of every value in the Secret.
+func getOptionsFrom(cmd *cobra.Command) (getOptions, error) {
+	flags := cmd.Flags()
+	var options getOptions
+	var err error
+	if options.Match, err = flags.GetString("match"); err != nil {
+		return options, err
+	}
+	if options.Decode, err = flags.GetBool("decode"); err != nil {
+		return options, err
+	}
+	if options.Yes, err = flags.GetBool("yes"); err != nil {
+		return options, err
+	}
+	if flags.Changed("key") {
+		options.HasKey = true
+		if options.Key, err = flags.GetString("key"); err != nil {
+			return options, err
+		}
+	}
+	return options, nil
 }
 
 // registerFormatFlags declares the kubectl flags a listing command reads by
