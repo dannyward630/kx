@@ -48,6 +48,10 @@ func TestSplitLeadingIndexes(t *testing.T) {
 		// and produce "@nope is not a valid int".
 		{[]string{"@api", "-o", "wide"}, 1, "-o wide"},
 		{[]string{"@api", "2", "--tail=5"}, 2, "--tail=5"},
+		// A flag ends the run even when its value holds "..", which a range
+		// check alone would have taken for a malformed range.
+		{[]string{"1", "--since=.."}, 1, "--since=.."},
+		{[]string{"--output=jsonpath={..metadata.name}"}, 0, "--output=jsonpath={..metadata.name}"},
 	}
 	for _, tc := range cases {
 		indexes, rest := splitLeadingIndexes(tc.args)

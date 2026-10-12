@@ -252,7 +252,12 @@ func commandHelp(cmd *cobra.Command) render.CommandHelp {
 	if doc == "" {
 		doc = strings.TrimSpace(cmd.Short)
 	}
-	if spec.Passthrough != "" && !passthroughMention.MatchString(doc) {
+	switch {
+	case cmd.Annotations[kubectlCommandAnnotation] != "":
+		// Not passed through: kx knows kubectl's flags here, lists them below,
+		// and refuses one it does not know rather than guessing at its shape.
+		doc += "\n\nA flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread."
+	case spec.Passthrough != "" && !passthroughMention.MatchString(doc):
 		doc += "\n\nUnrecognized flags are passed through to " + passthroughTarget(spec.Passthrough) + "."
 	}
 
@@ -289,13 +294,30 @@ func commandHelp(cmd *cobra.Command) render.CommandHelp {
 		Name: "-h, --help", Doc: "Show this message and exit",
 	})
 
-	var options []render.HelpItem
+	var options, kubectl []render.HelpItem
+	globals := false
 	cmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
-		if flag.Name == "help" || flag.Hidden {
+		if flag.Name == "help" || flag.Hidden || flag.Deprecated != "" {
 			return
 		}
-		options = append(options, render.HelpItem{Name: flagSpelling(flag), Doc: flag.Usage})
+		item := render.HelpItem{Name: flagSpelling(flag), Doc: flag.Usage}
+		switch kubectlFlagScope(flag) {
+		case kubectlFlagCommand:
+			kubectl = append(kubectl, item)
+		case kubectlFlagGlobal:
+			globals = true
+		default:
+			options = append(options, item)
+		}
 	})
+	// kubectl's global flags are the same thirty on every command and are
+	// kubectl's to document, so they are named here rather than listed.
+	if globals {
+		kubectl = append(kubectl, render.HelpItem{
+			Name: "…",
+			Doc:  "kubectl's global flags too: `--context`, `--kubeconfig`, `--as` and the rest; `kubectl options` lists them",
+		})
+	}
 
 	var examples []string
 	for _, line := range strings.Split(cmd.Example, "\n") {
@@ -311,6 +333,7 @@ func commandHelp(cmd *cobra.Command) render.CommandHelp {
 		Commands: subcommands,
 		Args:     positionalArgs(cmd),
 		Options:  options,
+		Kubectl:  kubectl,
 		Global:   global,
 		Aliases:  cmd.Aliases,
 		Examples: examples,

@@ -26,12 +26,19 @@ func TestGetRefusesAScopeFlagBesideAnIndex(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"-A", []string{"pods", "1", "-A"}, "'-A' cannot be combined with an index"},
+		// Quoted by the long name whichever spelling was typed, as kx tree
+		// and kx diag already quote it: cobra parses kx get's flags, and
+		// pflag reports which flag was given, not how it was spelled.
+		{"-A", []string{"pods", "1", "-A"}, "'--all-namespaces' cannot be combined with an index"},
 		{"--all-namespaces", []string{"pods", "1", "--all-namespaces"},
 			"'--all-namespaces' cannot be combined with an index"},
-		{"-n", []string{"pods", "1", "-n", "other"}, "'-n' cannot be combined with an index"},
+		{"-n", []string{"pods", "1", "-n", "other"}, "'--namespace' cannot be combined with an index"},
 		{"--namespace", []string{"pods", "1", "--namespace=other"},
 			"'--namespace' cannot be combined with an index"},
+		// Wherever the index sits: -A takes no value, so the 1 after it is
+		// an index rather than kubectl's resource name.
+		{"-A before the index", []string{"pods", "-A", "1"},
+			"'--all-namespaces' cannot be combined with an index"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			kube := &recordingKubectl{output: podsOutput}
