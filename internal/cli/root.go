@@ -39,6 +39,10 @@ type Services struct {
 	// command stopped at the argument guards rather than reaching what the
 	// command does with what it scanned.
 	Scanner scanner.Service
+	// KubectlClient finds the kubectl binary for `kx --version`. Injected so a
+	// test of the version screen does not depend on the kubectl installed on
+	// the machine running it; nil means kubectl.DetectClient.
+	KubectlClient func() kubectl.Client
 }
 
 // confirm is the consent prompt, falling back to the renderer's when a caller
@@ -105,11 +109,7 @@ func NewRoot(services Services, version string) *cobra.Command {
 		SilenceErrors: true,
 	}
 	// Match the Python CLI, which exposes -v as the version alias and -h for help.
-	//
-	// The text is rendered here rather than left to the template engine: it is
-	// a fixed block with no template actions in it, and building it in Go keeps
-	// a path containing "{{" from being executed as one.
-	root.SetVersionTemplate(versionText(info))
+	installVersion(root, info, services.KubectlClient)
 	root.Flags().BoolP("version", "v", false, "Show the kx version and exit")
 	root.PersistentFlags().Bool("no-color", false, "Disable styled output")
 
