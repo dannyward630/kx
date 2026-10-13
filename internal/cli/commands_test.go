@@ -1308,11 +1308,17 @@ func TestDescribeParsesKubectlFlags(t *testing.T) {
 // prod pods, nginx and redis, and returns what kubectl was asked to run.
 func indexCommand(t *testing.T, build func(Services) *cobra.Command, args ...string) (*recordingKubectl, error) {
 	t.Helper()
+	return indexCommandOn(t, kinds.Pod, build, args...)
+}
+
+// indexCommandOn is indexCommand with the two rows listed as kind.
+func indexCommandOn(t *testing.T, kind kinds.Kind, build func(Services) *cobra.Command, args ...string) (*recordingKubectl, error) {
+	t.Helper()
 	kube := &recordingKubectl{output: "ok"}
 	services := switchServices(t, kube)
 	services.Confirm = func(string) error { return nil }
 	if err := services.State.Save(state.State{
-		Resources: state.NewResources([]string{"nginx", "redis"}, kinds.Pod),
+		Resources: state.NewResources([]string{"nginx", "redis"}, kind),
 		Namespace: "prod",
 	}); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -1534,6 +1540,37 @@ func TestDeleteYesSkipsThePromptWhereverItSits(t *testing.T) {
 		_ = executeArgv(newDeleteCommand(services), tc.args)
 		if deleted := len(kube.runs) > 0; deleted != tc.deletes || asked == tc.deletes {
 			t.Errorf("kx delete %s: deleted=%v asked=%v, want deleted=%v", joinArgs(tc.args), deleted, asked, tc.deletes)
+		}
+	}
+}
+
+// kx scale parses kubectl scale's flags: the index and the count may sit
+// among them, and --replicas is still refused beside a count in any spelling.
+func TestScaleParsesKubectlFlags(t *testing.T) {
+	kube, err := indexCommandOn(t, kinds.Deployment, newScaleCommand, "--current-replicas", "2", "1", "3")
+	if err != nil {
+		t.Fatalf("kx scale --current-replicas 2 1 3: %v", err)
+	}
+	if len(kube.runs) != 1 || !strings.Contains(joinArgs(kube.runs[0]), "--replicas=3") ||
+		!strings.Contains(joinArgs(kube.runs[0]), "--current-replicas=2") {
+		t.Errorf("kubectl = %q, want --replicas=3 and --current-replicas=2", kube.runs)
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"1", "3", "--replicas", "4"}, "'--replicas' cannot be combined with a replica count"},
+		{[]string{"-n", "other", "1", "3"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"1", "3", "--bogus"}, "'--bogus' isn't a flag of kubectl scale"},
+		{[]string{"1", "--timeout=1m"}, "requires <index> <replicas>"},
+		{[]string{"1", "x"}, "Invalid value for 'replicas': 'x' is not a valid int."},
+	} {
+		kube, err := indexCommandOn(t, kinds.Deployment, newScaleCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx scale %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.runs) > 0 {
+			t.Errorf("kx scale %s: kubectl was called: %q", joinArgs(tc.args), kube.runs)
 		}
 	}
 }

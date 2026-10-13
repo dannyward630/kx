@@ -566,56 +566,49 @@ func newScaleCommand(services Services) *cobra.Command {
 			"conditional, --timeout, --dry-run. --replicas is the exception: kx builds it " +
 			"from the replica count given here, so a second one is refused rather than " +
 			"left for kubectl to choose between.",
-		Example: "  kx scale 1 3\n  kx scale 1 3 --current-replicas=2\n  kx scale 1 0 --timeout=1m",
-		// No Args validator: cobra's arity check runs against the
-		// unstripped argv, which counts forwarded kubectl flags as
-		// positional arguments — and `--help` is a single argument that a
-		// gate would reject before passthrough could resolve it. The real
-		// arity check happens below.
-		Annotations:        mutatingAnnotations,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			if len(rest) < 2 {
-				return requiredArgsError(cmd)
-			}
-			installAgentIndexNotice(services)
-			ref, err := parseRef("index", rest[0])
-			if err != nil {
-				return err
-			}
-			replicas, err := strconv.Atoi(rest[1])
-			if err != nil {
-				return fmt.Errorf(
-					"Invalid value for 'replicas': '%s' is not a valid int.", rest[1])
-			}
-			extra := rest[2:]
-			if hasFlag(extra, "--replicas", "") {
-				return fmt.Errorf(
-					"'--replicas' cannot be combined with a replica count — kx builds " +
-						"the flag from the count given here. Drop one of the two.")
-			}
-			_, namespace, kind, err := services.State.Resolve(ref)
-			if err != nil {
-				return err
-			}
-			resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
-			if err := refuseScopeFlagResolved(resolved, extra); err != nil {
-				return err
-			}
-			message, output, err := ScaleCommand{Kubectl: services.Kubectl, State: services.State}.
-				Execute(ref, replicas, extra)
-			if err != nil {
-				return err
-			}
-			reportChange(extra, output, message)
-			return nil
-		},
+		Example:     "  kx scale 1 3\n  kx scale 1 3 --current-replicas=2\n  kx scale 1 0 --timeout=1m",
+		Args:        minArgs(2),
+		Annotations: mutatingAnnotations,
 	}
 	registerChangeFlags(cmd)
+	kubectlFlags := registerKubectlFlags(cmd, "scale")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		if len(positional) < 2 {
+			return requiredArgsError(cmd)
+		}
+		installAgentIndexNotice(services)
+		ref, err := parseRef("index", positional[0])
+		if err != nil {
+			return err
+		}
+		replicas, err := strconv.Atoi(positional[1])
+		if err != nil {
+			return fmt.Errorf(
+				"Invalid value for 'replicas': '%s' is not a valid int.", positional[1])
+		}
+		extra := append(positional[2:len(positional):len(positional)], forward...)
+		if hasFlag(extra, "--replicas", "") {
+			return fmt.Errorf(
+				"'--replicas' cannot be combined with a replica count — kx builds " +
+					"the flag from the count given here. Drop one of the two.")
+		}
+		_, namespace, kind, err := services.State.Resolve(ref)
+		if err != nil {
+			return err
+		}
+		resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		message, output, err := ScaleCommand{Kubectl: services.Kubectl, State: services.State}.
+			Execute(ref, replicas, extra)
+		if err != nil {
+			return err
+		}
+		reportChange(extra, output, message)
+		return nil
+	}
 	return cmd
 }
 
