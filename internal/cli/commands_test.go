@@ -1574,3 +1574,45 @@ func TestScaleParsesKubectlFlags(t *testing.T) {
 		}
 	}
 }
+
+// kx rollout registers every action's kubectl flags, and once the action is
+// read, refuses a flag only another action defines, naming that action.
+func TestRolloutParsesEachActionsFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"undo", "--to-revision", "2", "1"}, "--to-revision=2"},
+		{[]string{"history", "1", "--revision=3"}, "--revision=3"},
+		{[]string{"status", "1", "--timeout", "2m"}, "--timeout=2m"},
+	} {
+		kube, err := indexCommandOn(t, kinds.Deployment, newRolloutCommand, tc.args...)
+		if err != nil {
+			t.Errorf("kx rollout %s: %v", joinArgs(tc.args), err)
+			continue
+		}
+		calls := append(kube.runs, kube.interactive...)
+		if len(calls) != 1 || !strings.Contains(joinArgs(calls[0]), "rollout "+tc.args[0]) ||
+			!strings.Contains(joinArgs(calls[0]), tc.want) {
+			t.Errorf("kx rollout %s: kubectl = %q, want %s with %s", joinArgs(tc.args), calls, tc.args[0], tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"status", "1", "--to-revision=2"}, "'--to-revision' cannot be combined with 'status' — it is a flag of kubectl rollout undo."},
+		{[]string{"restart", "1", "--revision", "3"}, "it is a flag of kubectl rollout status and kubectl rollout history."},
+		{[]string{"-n", "other", "undo", "1"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"undo", "1", "--bogus"}, "'--bogus' isn't a flag of kubectl rollout status, restart, pause, resume, history or undo as of"},
+		{[]string{"undo", "--timeout=1m"}, "requires <action> <index>"},
+	} {
+		kube, err := indexCommandOn(t, kinds.Deployment, newRolloutCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx rollout %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.runs)+len(kube.interactive) > 0 {
+			t.Errorf("kx rollout %s: kubectl was called: %q %q", joinArgs(tc.args), kube.runs, kube.interactive)
+		}
+	}
+}

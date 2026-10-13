@@ -613,7 +613,7 @@ func newScaleCommand(services Services) *cobra.Command {
 }
 
 func newRolloutCommand(services Services) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use: "rollout <action> <index> [kubectl flags]",
 		Short: "Run a rollout action (" + strings.Join(rolloutActionNames(), ", ") +
 			") on a Deployment, StatefulSet, or DaemonSet.",
@@ -626,54 +626,64 @@ func newRolloutCommand(services Services) *cobra.Command {
 		// No ValidArgs: cobra stops completing entirely once it is set, which
 		// left `kx rollout status <TAB>` offering filenames instead of the
 		// index it wants. installCompletions covers both positions.
-		// No Args validator: cobra's arity check runs against the
-		// unstripped argv, which counts forwarded kubectl flags as
-		// positional arguments — and `--help` is a single argument that a
-		// gate would reject before passthrough could resolve it. The real
-		// arity check happens below.
-		Annotations:        mutatingAnnotations,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			if len(rest) < 2 {
-				return requiredArgsError(cmd)
-			}
-			// Only for an action that changes the workload: status and
-			// history read, and a read-only command prints no notice.
-			if rolloutActionMutates(rest[0]) {
-				installAgentIndexNotice(services)
-			}
-			ref, err := parseRef("index", rest[1])
-			if err != nil {
-				return err
-			}
-			extra := rest[2:]
-			_, namespace, kind, err := services.State.Resolve(ref)
-			if err != nil {
-				return err
-			}
-			resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
-			if err := refuseScopeFlagResolved(resolved, extra); err != nil {
-				return err
-			}
-			output, err := RolloutCommand{Kubectl: services.Kubectl, State: services.State}.
-				Execute(rest[0], ref, extra)
-			if err != nil {
-				return err
-			}
-			if strings.TrimSpace(output) != "" {
-				// As kubectl printed it: Raw adds back the one newline taken
-				// off here. Trimming them all and adding one, Raw's own made
-				// a blank line kubectl never printed after "rolled back" —
-				// while history, which does end in one, keeps it.
-				render.Raw(strings.TrimSuffix(output, "\n"))
-			}
-			return nil
-		},
+		Args:        minArgs(2),
+		Annotations: mutatingAnnotations,
 	}
+	// Every action's flags, since which kubectl rollout subcommand runs is
+	// only known once the action is read; a flag of another action is
+	// refused below.
+	subcommands := make([]string, 0, len(rolloutActions))
+	for _, action := range rolloutActionNames() {
+		subcommands = append(subcommands, "rollout "+action)
+	}
+	kubectlFlags := registerKubectlFlags(cmd, subcommands...)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		if len(positional) < 2 {
+			return requiredArgsError(cmd)
+		}
+		action := positional[0]
+		// An unknown action is RolloutCommand's to report; until the
+		// action is known there is no table to hold its flags against.
+		if isRolloutAction(action) {
+			if flag := kubectlFlags.outside(cmd.Flags(), "rollout "+action); flag != "" {
+				return fmt.Errorf("'%s' cannot be combined with '%s' — it is a flag of %s.",
+					flag, action, joinAnd(kubectlFlags.definers(flag)))
+			}
+		}
+		// Only for an action that changes the workload: status and
+		// history read, and a read-only command prints no notice.
+		if rolloutActionMutates(action) {
+			installAgentIndexNotice(services)
+		}
+		ref, err := parseRef("index", positional[1])
+		if err != nil {
+			return err
+		}
+		extra := append(positional[2:len(positional):len(positional)], forward...)
+		_, namespace, kind, err := services.State.Resolve(ref)
+		if err != nil {
+			return err
+		}
+		resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		output, err := RolloutCommand{Kubectl: services.Kubectl, State: services.State}.
+			Execute(action, ref, extra)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(output) != "" {
+			// As kubectl printed it: Raw adds back the one newline taken
+			// off here. Trimming them all and adding one, Raw's own made
+			// a blank line kubectl never printed after "rolled back" —
+			// while history, which does end in one, keeps it.
+			render.Raw(strings.TrimSuffix(output, "\n"))
+		}
+		return nil
+	}
+	return cmd
 }
 
 func newPortForwardCommand(services Services) *cobra.Command {

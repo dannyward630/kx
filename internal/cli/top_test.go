@@ -1141,7 +1141,7 @@ func TestTopRefusesAnUnknownFlag(t *testing.T) {
 	quietRender(t)
 	kube := &fakeKubectl{output: nodesOutput}
 	err := executeArgv(newTopCommand(topServices(t, kube)), []string{"--bogus"})
-	if err == nil || !strings.Contains(err.Error(), "'--bogus' isn't a flag of kubectl top pod or kubectl top node as of") {
+	if err == nil || !strings.Contains(err.Error(), "'--bogus' isn't a flag of kubectl top pod or node as of") {
 		t.Errorf("err = %v, want the unknown-flag refusal", err)
 	}
 	if len(kube.calls) > 0 {
