@@ -1644,3 +1644,32 @@ func TestPortForwardParsesKubectlFlags(t *testing.T) {
 		}
 	}
 }
+
+// kx cp parses kubectl cp's flags: source and destination may sit among them,
+// and -c, --retries and --no-preserve reach kubectl in any spelling.
+func TestCopyParsesKubectlFlags(t *testing.T) {
+	kube, err := indexCommand(t, newCopyCommand, "-c", "app", "1:/etc/hosts", "./hosts", "--retries", "3")
+	if err != nil {
+		t.Fatalf("kx cp -c app 1:/etc/hosts ./hosts --retries 3: %v", err)
+	}
+	calls := append(kube.runs, kube.interactive...)
+	if len(calls) != 1 || !strings.HasPrefix(joinArgs(calls[0]), "cp prod/nginx:/etc/hosts ./hosts") ||
+		!strings.Contains(joinArgs(calls[0]), "--container=app") || !strings.Contains(joinArgs(calls[0]), "--retries=3") {
+		t.Errorf("kubectl = %q, want the copy with --container=app and --retries=3", calls)
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"1:/etc/hosts", "./hosts", "--bogus"}, "'--bogus' isn't a flag of kubectl cp"},
+		{[]string{"1:/etc/hosts", "--retries=3"}, "requires <src> <dest>"},
+	} {
+		kube, err := indexCommand(t, newCopyCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx cp %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.runs)+len(kube.interactive) > 0 {
+			t.Errorf("kx cp %s: kubectl was called", joinArgs(tc.args))
+		}
+	}
+}
