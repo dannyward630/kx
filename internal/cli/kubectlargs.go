@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -135,7 +136,24 @@ func registerKubectlFlags(cmd *cobra.Command, subcommand string) *kubectlArgs {
 	}
 	cmd.Annotations[kubectlCommandAnnotation] = subcommand
 	cmd.SetFlagErrorFunc(unknownFlagError)
+	recorders.Store(cmd, args)
 	return args
+}
+
+// recorders maps each command that registered kubectl's flags to the argv
+// they record, for code that sees the command but not its RunE's closure:
+// machineOutput, deciding from the argv kubectl will get whether a failure may
+// print a listing to stdout.
+var recorders sync.Map
+
+// recordedKubectlArgs is cmd's recorder, or nil for a command that still
+// splits its argv by hand.
+func recordedKubectlArgs(cmd *cobra.Command) *kubectlArgs {
+	recorded, ok := recorders.Load(cmd)
+	if !ok {
+		return nil
+	}
+	return recorded.(*kubectlArgs)
 }
 
 // isKubectlFlag reports whether flag was registered from kubectl's table

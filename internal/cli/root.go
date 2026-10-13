@@ -240,20 +240,7 @@ func newGetCommand(services Services) *cobra.Command {
 		Example: "  kx get pods\n  kx get pods -n prod -l app=web\n  kx get deploy -m api\n  kx get pods 1..3\n  kx get pods 3..\n  kx get pods --watch",
 		Args:    minArgs(1),
 	}
-	cmd.Flags().StringP("match", "m", "", matchUsage)
-	cmd.Flags().Bool("decode", false,
-		"Show Secret data in plaintext; every Secret in the namespace when no index is given")
-	cmd.Flags().StringP("key", "k", "", "With --decode, print only this key's value")
-	cmd.Flags().BoolP("yes", "y", false,
-		"Skip the confirmation prompt for a namespace-wide --decode")
-	// kubectl's flags that kx also reads, registered first so they keep kx's
-	// own usage; registerKubectlFlags gives them kubectl's shape and forwards
-	// them with the rest.
-	cmd.Flags().StringP("namespace", "n", "", "Namespace to list from; defaults to the current namespace")
-	cmd.Flags().BoolP("all-namespaces", "A", false, "List across every namespace; each row is indexed and carries its own namespace")
-	registerFormatFlags(cmd)
-	registerWatchFlag(cmd)
-	kubectlFlags := registerKubectlFlags(cmd, "get")
+	kubectlFlags := registerGetFlags(cmd)
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
@@ -275,6 +262,25 @@ func newGetCommand(services Services) *cobra.Command {
 		return runGet(services, positional[0], rest, options)
 	}
 	return cmd
+}
+
+// registerGetFlags registers the flags kx get and kx secret share: kx's own,
+// then kubectl get's from the table.
+func registerGetFlags(cmd *cobra.Command) *kubectlArgs {
+	cmd.Flags().StringP("match", "m", "", matchUsage)
+	cmd.Flags().Bool("decode", false,
+		"Show Secret data in plaintext; every Secret in the namespace when no index is given")
+	cmd.Flags().StringP("key", "k", "", "With --decode, print only this key's value")
+	cmd.Flags().BoolP("yes", "y", false,
+		"Skip the confirmation prompt for a namespace-wide --decode")
+	// kubectl's flags that kx also reads, registered first so they keep kx's
+	// own usage; registerKubectlFlags gives them kubectl's shape and forwards
+	// them with the rest.
+	cmd.Flags().StringP("namespace", "n", "", "Namespace to list from; defaults to the current namespace")
+	cmd.Flags().BoolP("all-namespaces", "A", false, "List across every namespace; each row is indexed and carries its own namespace")
+	registerFormatFlags(cmd)
+	registerWatchFlag(cmd)
+	return registerKubectlFlags(cmd, "get")
 }
 
 // getOptionsFrom reads kx get's own flags, which cobra parsed.
