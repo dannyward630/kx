@@ -358,41 +358,39 @@ func checkFollow(args []string, indexes int) error {
 }
 
 func newEditCommand(services Services) *cobra.Command {
-	return &cobra.Command{
-		Use:                "edit <index> [kubectl flags]",
-		Short:              "Open an indexed resource in your editor via kubectl edit.",
-		Long:               "Opens an indexed resource in your editor via kubectl edit — one resource at a time, since only one editor session can be open.",
-		Example:            "  kx edit 2",
-		Args:               minArgs(1),
-		Annotations:        mutatingAnnotations,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			// Cobra's arity check ran against the unstripped argv, so an
-			// argument list of nothing but kx's own flags reaches here empty.
-			if len(rest) == 0 {
-				return requiredArgsError(cmd)
-			}
-			installAgentIndexNotice(services)
-			ref, err := parseRef("index", rest[0])
-			if err != nil {
-				return err
-			}
-			_, namespace, kind, err := services.State.Resolve(ref)
-			if err != nil {
-				return err
-			}
-			resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
-			if err := refuseScopeFlagResolved(resolved, rest[1:]); err != nil {
-				return err
-			}
-			return EditCommand{Kubectl: services.Kubectl, State: services.State}.
-				Execute(ref, rest[1:])
-		},
+	cmd := &cobra.Command{
+		Use:         "edit <index> [kubectl flags]",
+		Short:       "Open an indexed resource in your editor via kubectl edit.",
+		Long:        "Opens an indexed resource in your editor via kubectl edit — one resource at a time, since only one editor session can be open.",
+		Example:     "  kx edit 2",
+		Args:        minArgs(1),
+		Annotations: mutatingAnnotations,
 	}
+	kubectlFlags := registerKubectlFlags(cmd, "edit")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		if len(positional) == 0 {
+			return requiredArgsError(cmd)
+		}
+		installAgentIndexNotice(services)
+		ref, err := parseRef("index", positional[0])
+		if err != nil {
+			return err
+		}
+		_, namespace, kind, err := services.State.Resolve(ref)
+		if err != nil {
+			return err
+		}
+		// Anything after the index is kubectl's, ahead of its flags.
+		extra := append(positional[1:len(positional):len(positional)], forward...)
+		resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		return EditCommand{Kubectl: services.Kubectl, State: services.State}.
+			Execute(ref, extra)
+	}
+	return cmd
 }
 
 func newExecCommand(services Services) *cobra.Command {
