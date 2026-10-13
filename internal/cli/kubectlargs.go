@@ -57,6 +57,16 @@ type kubectlArgs struct {
 	definedBy map[string][]string
 }
 
+// definers names, as "kubectl <subcommand>", the subcommands that define the
+// flag spelled "--name", for a refusal from outside to say where it belongs.
+func (a *kubectlArgs) definers(flag string) []string {
+	var names []string
+	for _, subcommand := range a.definedBy[strings.TrimPrefix(flag, "--")] {
+		names = append(names, "kubectl "+subcommand)
+	}
+	return names
+}
+
 // outside returns the first kubectl flag given on the command that subcommand
 // does not define, by its long name, or "" when there is none. A command that
 // registered the flags of several subcommands calls it once it knows which
@@ -267,13 +277,36 @@ func flagError(cmd *cobra.Command, err error) error {
 }
 
 // kubectlSubcommands names the kubectl subcommands cmd forwards to: "kubectl
-// get", or "kubectl top pod or kubectl top node".
+// get", or, for several under one parent, the parent once — "kubectl top pod
+// or node", "kubectl rollout status, restart, pause, resume, history or undo".
 func kubectlSubcommands(cmd *cobra.Command) string {
-	var names []string
-	for _, subcommand := range strings.Split(cmd.Annotations[kubectlCommandAnnotation], ",") {
-		names = append(names, "kubectl "+subcommand)
+	subcommands := strings.Split(cmd.Annotations[kubectlCommandAnnotation], ",")
+	if len(subcommands) == 1 {
+		return "kubectl " + subcommands[0]
 	}
-	return strings.Join(names, " or ")
+	parent, _, _ := strings.Cut(subcommands[0], " ")
+	children := make([]string, 0, len(subcommands))
+	for _, subcommand := range subcommands {
+		child, ok := strings.CutPrefix(subcommand, parent+" ")
+		if !ok {
+			// No shared parent: name each in full.
+			named := make([]string, len(subcommands))
+			for i, s := range subcommands {
+				named[i] = "kubectl " + s
+			}
+			return joinOr(named)
+		}
+		children = append(children, child)
+	}
+	return "kubectl " + parent + " " + joinOr(children)
+}
+
+// joinOr lists names as "a, b or c".
+func joinOr(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }
 
 // requiredUse is cmd's path and its required arguments, the shortest
