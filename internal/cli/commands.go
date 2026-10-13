@@ -199,21 +199,10 @@ func newDescribeCommand(services Services) *cobra.Command {
 	}
 	kubectlFlags := registerKubectlFlags(cmd, "describe")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
-		// The leading run of numbers are the indexes. The first argument is
-		// always an index, so a non-numeric one is reported rather than
-		// quietly forwarded — otherwise `kx describe abc` would describe
-		// nothing and succeed. Any argument after the indexes is kubectl's,
-		// ahead of its flags, as it was before kx parsed them.
-		indexArgs, stray := splitLeadingIndexes(positional)
-		if len(indexArgs) == 0 {
-			if len(positional) > 0 {
-				return fmt.Errorf(
-					"Invalid value for 'indexes': '%s' is not a valid int.", positional[0])
-			}
-			return requiredArgsError(cmd)
+		indexArgs, extra, err := indexArgv(cmd, args, kubectlFlags)
+		if err != nil {
+			return err
 		}
-		extra := append(stray[:len(stray):len(stray)], forward...)
 		resolved, err := resolveRefs(services.State, "indexes", indexArgs)
 		if err != nil {
 			return err
@@ -269,60 +258,52 @@ func newLogsCommand(services Services) *cobra.Command {
 		Short:      "Stream logs for an indexed resource; aggregates across pods for Deployments, StatefulSets, DaemonSets, Jobs, and Services.",
 		Long: "Streams logs for an indexed resource. Deployments, StatefulSets, DaemonSets, Jobs and Services aggregate logs across the pods they own.\n\n" +
 			"kubectl's own flags pass through. --since is the exception: it is read here first, so it takes the day spelling kx uses everywhere else (7d) as well as the ones kubectl understands.",
-		Example:            "  kx logs 1\n  kx logs 1 2\n  kx logs 1 -f --tail=100\n  kx logs 1 --since 7d\n  kx logs 1..3\n  kx logs 3..\n  kx logs @api -f",
-		Args:               minArgs(1),
-		Annotations:        documentAnnotations,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			// Indexes lead, kubectl's flags follow — the same split describe
-			// uses. Without it a second index reaches kubectl as a positional,
-			// where it means a container name.
-			indexArgs, extra := splitLeadingIndexes(rest)
-			if len(indexArgs) == 0 {
-				if len(rest) > 0 {
-					return fmt.Errorf(
-						"Invalid value for 'indexes': '%s' is not a valid int.", rest[0])
-				}
-				return requiredArgsError(cmd)
-			}
-			resolved, err := resolveRefs(services.State, "indexes", indexArgs)
-			if err != nil {
-				return err
-			}
-			if err := refuseScopeFlagResolved(resolved, extra); err != nil {
-				return err
-			}
-			if err := checkFollow(extra, len(resolved)); err != nil {
-				return err
-			}
-			// Before the first subprocess, so a malformed window is reported
-			// once in kx's voice rather than once per index in kubectl's.
-			if extra, err = rewriteSince(extra); err != nil {
-				return err
-			}
-
-			command := LogsCommand{
-				Kubectl: services.Kubectl, State: services.State, Status: render.Status,
-			}
-			first := true
-			return runEach(resolved, func(target Resolved) error {
-				if !first {
-					render.Blank()
-				}
-				first = false
-				banner(cmd, target, "")
-				return command.Execute(target.Ref, extra)
-			})
-		},
+		Example:     "  kx logs 1\n  kx logs 1 2\n  kx logs 1 -f --tail=100\n  kx logs 1 --since 7d\n  kx logs 1..3\n  kx logs 3..\n  kx logs @api -f",
+		Args:        minArgs(1),
+		Annotations: documentAnnotations,
 	}
-	// Registered so it appears in the command's help; parsing is by hand, like
-	// every other flag on a command that forwards argv to kubectl.
+	// kubectl's flag, registered first so it keeps kx's usage: kx reads it
+	// before kubectl does, to take the day spelling.
 	cmd.Flags().String("since", "",
 		"Only logs newer than this; "+config.DurationUnits+": "+config.DurationExamples)
+	kubectlFlags := registerKubectlFlags(cmd, "logs")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		// Indexes lead, kubectl's arguments follow. Without the split a
+		// second index reaches kubectl as a positional, where it means a
+		// container name.
+		indexArgs, extra, err := indexArgv(cmd, args, kubectlFlags)
+		if err != nil {
+			return err
+		}
+		resolved, err := resolveRefs(services.State, "indexes", indexArgs)
+		if err != nil {
+			return err
+		}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		if err := checkFollow(extra, len(resolved)); err != nil {
+			return err
+		}
+		// Before the first subprocess, so a malformed window is reported
+		// once in kx's voice rather than once per index in kubectl's.
+		if extra, err = rewriteSince(extra); err != nil {
+			return err
+		}
+
+		command := LogsCommand{
+			Kubectl: services.Kubectl, State: services.State, Status: render.Status,
+		}
+		first := true
+		return runEach(resolved, func(target Resolved) error {
+			if !first {
+				render.Blank()
+			}
+			first = false
+			banner(cmd, target, "")
+			return command.Execute(target.Ref, extra)
+		})
+	}
 	return cmd
 }
 
