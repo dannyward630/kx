@@ -1250,3 +1250,56 @@ func TestNewServicesForwardsKubectlWarnings(t *testing.T) {
 		t.Error("kubectl.Exec.Warn is nil; kubectl's warnings are dropped")
 	}
 }
+
+// kx describe parses kubectl describe's flags, so an index may follow them,
+// a scope flag beside it is refused wherever it sits, and a flag kubectl
+// describe lacks is refused before kubectl runs.
+func TestDescribeParsesKubectlFlags(t *testing.T) {
+	describe := func(args ...string) (*recordingKubectl, error) {
+		kube := &recordingKubectl{output: "ok"}
+		services := switchServices(t, kube)
+		if err := services.State.Save(state.State{
+			Resources: state.NewResources([]string{"nginx"}, kinds.Pod),
+			Namespace: "prod",
+		}); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		quietRender(t)
+		return kube, executeArgv(newDescribeCommand(services), args)
+	}
+
+	kube, err := describe("--show-events=false", "1")
+	if err != nil {
+		t.Fatalf("kx describe --show-events=false 1: %v", err)
+	}
+	if len(kube.interactive) != 1 || joinArgs(kube.interactive[0]) != "describe Pod nginx -n prod --show-events=false" {
+		t.Errorf("kubectl = %q, want the index after the flag resolved", kube.interactive)
+	}
+
+	// An argument after the indexes is kubectl's, ahead of its flags, as it
+	// was when kx split argv by hand.
+	kube, err = describe("1", "redis", "--show-events=false")
+	if err != nil {
+		t.Fatalf("kx describe 1 redis: %v", err)
+	}
+	if len(kube.interactive) != 1 || joinArgs(kube.interactive[0]) != "describe Pod nginx -n prod redis --show-events=false" {
+		t.Errorf("kubectl = %q, want redis forwarded before the flags", kube.interactive)
+	}
+
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-n", "other", "1"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"--chunk-size", "500"}, "requires <index>"},
+		{[]string{"1", "-o", "wide"}, "'-o' isn't a flag of kubectl describe"},
+	} {
+		kube, err := describe(tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx describe %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.interactive) > 0 {
+			t.Errorf("kx describe %s: kubectl was called: %q", joinArgs(tc.args), kube.interactive)
+		}
+	}
+}
