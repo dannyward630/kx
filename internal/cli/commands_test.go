@@ -1303,3 +1303,60 @@ func TestDescribeParsesKubectlFlags(t *testing.T) {
 		}
 	}
 }
+
+// indexCommand runs a converted index command on argv against a listing of two
+// prod pods, nginx and redis, and returns what kubectl was asked to run.
+func indexCommand(t *testing.T, build func(Services) *cobra.Command, args ...string) (*recordingKubectl, error) {
+	t.Helper()
+	kube := &recordingKubectl{output: "ok"}
+	services := switchServices(t, kube)
+	services.Confirm = func(string) error { return nil }
+	if err := services.State.Save(state.State{
+		Resources: state.NewResources([]string{"nginx", "redis"}, kinds.Pod),
+		Namespace: "prod",
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	quietRender(t)
+	return kube, executeArgv(build(services), args)
+}
+
+// kx logs parses kubectl logs' flags: an index may follow them, kx's own
+// reading of --since and --follow sees them in any spelling, and an argument
+// after the index is still kubectl's container.
+func TestLogsParsesKubectlFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--tail", "5", "1"}, "logs nginx -n prod --tail=5"},
+		{[]string{"1", "--since", "7d"}, "logs nginx -n prod --since=168h0m0s"},
+		{[]string{"1", "web", "-f"}, "logs nginx -n prod web --follow"},
+	} {
+		kube, err := indexCommand(t, newLogsCommand, tc.args...)
+		if err != nil {
+			t.Errorf("kx logs %s: %v", joinArgs(tc.args), err)
+			continue
+		}
+		if len(kube.interactive) != 1 || joinArgs(kube.interactive[0]) != tc.want {
+			t.Errorf("kx logs %s: kubectl = %q, want %q", joinArgs(tc.args), kube.interactive, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-f", "1", "2"}, "--follow streams a single pod"},
+		{[]string{"1", "--since", "soon"}, "'--since'"},
+		{[]string{"1", "-o", "json"}, "'-o' isn't a flag of kubectl logs"},
+		{[]string{"-n", "other", "1"}, "'--namespace' cannot be combined with an index"},
+	} {
+		kube, err := indexCommand(t, newLogsCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx logs %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.interactive) > 0 {
+			t.Errorf("kx logs %s: kubectl was called: %q", joinArgs(tc.args), kube.interactive)
+		}
+	}
+}

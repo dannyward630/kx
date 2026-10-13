@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -91,6 +92,10 @@ type kubectlValue struct {
 	args  *kubectlArgs
 	flag  kubectlflags.Flag
 	value string
+	// kxType is the type kx registered a shared flag with, which help shows
+	// in place of kubectl's: kx documents a shared flag in its own terms, and
+	// kx logs' --since takes 7d, which is no Go duration.
+	kxType string
 }
 
 func (v *kubectlValue) Set(value string) error {
@@ -101,8 +106,14 @@ func (v *kubectlValue) Set(value string) error {
 
 func (v *kubectlValue) String() string { return v.value }
 
-// Type is kubectl's own, so help names the value the way kubectl's does.
-func (v *kubectlValue) Type() string { return v.flag.Type }
+// Type is kubectl's own, so help names the value the way kubectl's does —
+// or, for a flag kx documents itself, the type kx gave it.
+func (v *kubectlValue) Type() string {
+	if v.kxType != "" {
+		return v.kxType
+	}
+	return v.flag.Type
+}
 
 // registerKubectlFlags registers every flag kubectl defines on subcommands,
 // and kubectl's global flags, on cmd, and returns the argv they record. A
@@ -125,6 +136,7 @@ func registerKubectlFlags(cmd *cobra.Command, subcommands ...string) *kubectlArg
 	register := func(flag kubectlflags.Flag, where string) {
 		value := &kubectlValue{args: args, flag: flag}
 		if existing := flags.Lookup(flag.Name); existing != nil {
+			value.kxType = existing.Value.Type()
 			existing.Value = value
 			existing.NoOptDefVal = flag.NoOptDefVal
 			existing.DefValue = ""
@@ -163,10 +175,15 @@ func registerKubectlFlags(cmd *cobra.Command, subcommands ...string) *kubectlArg
 		register(flag, kubectlFlagGlobal)
 	}
 
-	if cmd.Annotations == nil {
-		cmd.Annotations = map[string]string{}
+	// Copied, never written in place: several commands share one annotation
+	// map (documentAnnotations, mutatingAnnotations), and marking it here
+	// marked every command sharing it as converted.
+	annotations := maps.Clone(cmd.Annotations)
+	if annotations == nil {
+		annotations = map[string]string{}
 	}
-	cmd.Annotations[kubectlCommandAnnotation] = strings.Join(subcommands, ",")
+	annotations[kubectlCommandAnnotation] = strings.Join(subcommands, ",")
+	cmd.Annotations = annotations
 	cmd.SetFlagErrorFunc(flagError)
 	recorders.Store(cmd, args)
 	return args
@@ -274,4 +291,22 @@ func kubectlArgv(cmd *cobra.Command, args []string, recorded *kubectlArgs) (posi
 	}
 	forward = append(append([]string{}, recorded.tokens...), verbatim...)
 	return positional, forward
+}
+
+// indexArgv splits a converted index command's parsed argv: the leading run of
+// indexes, and kubectl's argv — any positional after the indexes, ahead of
+// kubectl's flags, as it was when kx split argv by hand (kx logs 1 web names a
+// container). The first positional is always an index, so a non-numeric one
+// is reported rather than quietly forwarded.
+func indexArgv(cmd *cobra.Command, args []string, recorded *kubectlArgs) (indexes, extra []string, err error) {
+	positional, forward := kubectlArgv(cmd, args, recorded)
+	indexes, stray := splitLeadingIndexes(positional)
+	if len(indexes) == 0 {
+		if len(positional) > 0 {
+			return nil, nil, fmt.Errorf(
+				"Invalid value for 'indexes': '%s' is not a valid int.", positional[0])
+		}
+		return nil, nil, requiredArgsError(cmd)
+	}
+	return indexes, append(stray[:len(stray):len(stray)], forward...), nil
 }

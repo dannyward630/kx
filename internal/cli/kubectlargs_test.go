@@ -199,3 +199,29 @@ func TestRequiredUse(t *testing.T) {
 		t.Errorf("requiredUse = %q, want %q", got, "kx get <resource>")
 	}
 }
+
+// Commands share annotation maps — every document command has
+// documentAnnotations — so registering kubectl's flags on one must not mark
+// the others as converted. Converting kx logs once told kx yaml's help that
+// unknown flags are refused.
+func TestRegisteringKubectlFlagsLeavesSharedAnnotationsAlone(t *testing.T) {
+	shared := map[string]string{"kx/shared": "true"}
+	cmd := &cobra.Command{Use: "logs <index>", Annotations: shared}
+	registerKubectlFlags(cmd, "logs")
+	if _, marked := shared[kubectlCommandAnnotation]; marked {
+		t.Error("the shared annotation map was marked as converted")
+	}
+	if cmd.Annotations[kubectlCommandAnnotation] != "logs" || cmd.Annotations["kx/shared"] != "true" {
+		t.Errorf("cmd.Annotations = %v, want its own copy, marked and keeping the shared keys", cmd.Annotations)
+	}
+}
+
+// A shared flag is documented in kx's terms, its type included: kx logs'
+// --since takes 7d, and help calling it a duration would send a reader to
+// Go's duration syntax.
+func TestSharedFlagsKeepKxsType(t *testing.T) {
+	since := newLogsCommand(Services{}).Flags().Lookup("since")
+	if since == nil || since.Value.Type() != "string" {
+		t.Errorf("--since type = %v, want kx's string", since)
+	}
+}
