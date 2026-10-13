@@ -1616,3 +1616,31 @@ func TestRolloutParsesEachActionsFlags(t *testing.T) {
 		}
 	}
 }
+
+// kx port-forward parses kubectl port-forward's flags: the index and port may
+// sit among them, and further ports are still kubectl's.
+func TestPortForwardParsesKubectlFlags(t *testing.T) {
+	kube, err := indexCommand(t, newPortForwardCommand, "--address", "0.0.0.0", "1", "8080:80", "9090:90")
+	if err != nil {
+		t.Fatalf("kx port-forward --address 0.0.0.0 1 8080:80 9090:90: %v", err)
+	}
+	if len(kube.interactive) != 1 || joinArgs(kube.interactive[0]) != "port-forward Pod/nginx 8080:80 -n prod 9090:90 --address=0.0.0.0" {
+		t.Errorf("kubectl = %q, want both ports and the address", kube.interactive)
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-n", "other", "1", "8080"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"1", "8080", "--bogus"}, "'--bogus' isn't a flag of kubectl port-forward"},
+		{[]string{"1", "--address=0.0.0.0"}, "requires <index> <port>"},
+	} {
+		kube, err := indexCommand(t, newPortForwardCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx port-forward %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.interactive) > 0 {
+			t.Errorf("kx port-forward %s: kubectl was called: %q", joinArgs(tc.args), kube.interactive)
+		}
+	}
+}

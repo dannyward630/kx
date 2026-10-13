@@ -687,44 +687,39 @@ func newRolloutCommand(services Services) *cobra.Command {
 }
 
 func newPortForwardCommand(services Services) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:        "port-forward <index> <port> [kubectl flags]",
 		SuggestFor: []string{"pf", "portforward", "proxy"},
 		Short:      "Forward a local port to an indexed resource (Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet, Service).",
 		Long: "Forwards a local port to an indexed resource. Given a workload rather than a Pod, " +
 			"kubectl picks which of its pods to forward to — the same choice kx exec leaves to kubectl.",
 		Example: "  kx port-forward 1 8080:80",
-		// No Args validator: cobra's arity check runs against the
-		// unstripped argv, before passthrough can pull --help out of it —
-		// `kx port-forward --help` is a single argument, which used to fail
-		// a MinimumNArgs(2) gate before RunE ever saw it. The real "need an
-		// index and a port" check happens below, once passthrough has
-		// already resolved --help.
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			if len(rest) < 2 {
-				return requiredArgsError(cmd)
-			}
-			ref, err := parseRef("index", rest[0])
-			if err != nil {
-				return err
-			}
-			_, namespace, kind, err := services.State.Resolve(ref)
-			if err != nil {
-				return err
-			}
-			resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
-			if err := refuseScopeFlagResolved(resolved, rest[2:]); err != nil {
-				return err
-			}
-			return PortForwardCommand{Kubectl: services.Kubectl, State: services.State}.
-				Execute(ref, rest[1], rest[2:])
-		},
+		Args:    minArgs(2),
 	}
+	kubectlFlags := registerKubectlFlags(cmd, "port-forward")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		if len(positional) < 2 {
+			return requiredArgsError(cmd)
+		}
+		ref, err := parseRef("index", positional[0])
+		if err != nil {
+			return err
+		}
+		_, namespace, kind, err := services.State.Resolve(ref)
+		if err != nil {
+			return err
+		}
+		// Further ports are kubectl's, ahead of its flags: it forwards several.
+		extra := append(positional[2:len(positional):len(positional)], forward...)
+		resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		return PortForwardCommand{Kubectl: services.Kubectl, State: services.State}.
+			Execute(ref, positional[1], extra)
+	}
+	return cmd
 }
 
 func newCopyCommand(services Services) *cobra.Command {
