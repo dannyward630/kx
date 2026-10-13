@@ -57,7 +57,7 @@ func groupByNamespace(resolved []Resolved) []namespaceGroup {
 // it over the listing, and kx get all 3 --decode printed a Secret.
 //
 // Every ref is resolved before any is refused or fetched, as
-// resolveRefsExpecting does, so the refusal names the first row it finds.
+// resolveParsedExpecting does, so the refusal names the first row it finds.
 func resolveCovered(resolver IndexResolver, refs []state.Ref, resource string) ([]Resolved, error) {
 	resolved, err := resolveParsed(refs, resolver.Resolve)
 	if err != nil {
@@ -224,7 +224,7 @@ func runGet(services Services, resource string, args []string, options getOption
 		// Resolved only when the command already names a Secret-shaped
 		// resource and carries indexes: otherwise decodeSecrets's own guards
 		// (--decode required, kind mismatch) are what should fire, and firing
-		// resolveRefsExpecting first would replace those messages with a
+		// resolveParsedExpecting first would replace those messages with a
 		// resolution error about an index that was never going to be
 		// fetched. When it does apply, resolving the whole batch here —
 		// before decodeSecrets fetches or renders anything — is what stops a
@@ -243,7 +243,7 @@ func runGet(services Services, resource string, args []string, options getOption
 	// The namespace an index fetch is taken in when the user named none.
 	var scope string
 	if len(refs) > 0 {
-		// resolveRefsExpecting resolves every index before any of them is
+		// resolveParsedExpecting resolves every index before any of them is
 		// acted on, so an out-of-range index late in the batch is caught
 		// before the first kubectl call rather than after some of them have
 		// already run. Expecting rather than resolveRefs's plain Resolve: the

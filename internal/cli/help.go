@@ -457,20 +457,6 @@ func minArgs(n int) cobra.PositionalArgs {
 	}
 }
 
-// exactArgs is minArgs' counterpart for a command whose argument count is
-// fixed rather than open-ended. Both a shortfall and an overflow report the
-// same message: either way, RunE did not get what the Use string promises,
-// and cp/drain/port-forward's hand-written arity errors don't distinguish
-// the two either.
-func exactArgs(n int) cobra.PositionalArgs {
-	return func(cmd *cobra.Command, args []string) error {
-		if len(args) == n {
-			return nil
-		}
-		return requiredArgsError(cmd)
-	}
-}
-
 // requiredArgsError names a command's required arguments the way its own
 // Usage line already spells them, so `kx describe` with no index answers
 // "kx describe requires <index>... — see 'kx describe --help' for usage."
