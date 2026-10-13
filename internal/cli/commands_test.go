@@ -1360,3 +1360,31 @@ func TestLogsParsesKubectlFlags(t *testing.T) {
 		}
 	}
 }
+
+// kx edit parses kubectl edit's flags: the index may follow them, and a flag
+// kubectl edit lacks is refused before an editor opens.
+func TestEditParsesKubectlFlags(t *testing.T) {
+	kube, err := indexCommand(t, newEditCommand, "-o", "json", "2")
+	if err != nil {
+		t.Fatalf("kx edit -o json 2: %v", err)
+	}
+	if len(kube.interactive) != 1 || joinArgs(kube.interactive[0]) != "edit Pod redis -n prod --output=json" {
+		t.Errorf("kubectl = %q, want row 2 edited with the flag", kube.interactive)
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-n", "other", "1"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"1", "--tail", "5"}, "'--tail' isn't a flag of kubectl edit"},
+		{[]string{"--windows-line-endings"}, "requires <index>"},
+	} {
+		kube, err := indexCommand(t, newEditCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx edit %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.interactive) > 0 {
+			t.Errorf("kx edit %s: kubectl was called: %q", joinArgs(tc.args), kube.interactive)
+		}
+	}
+}
