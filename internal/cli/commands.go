@@ -766,85 +766,67 @@ func newYamlCommand(services Services) *cobra.Command {
 			"JSON. --show cannot be combined with one: it parses the YAML it narrows.",
 		Example: "  kx yaml 1\n  kx yaml 1 2\n  kx yaml 1 --show metadata,spec\n  kx yaml 1..3\n" +
 			"  kx yaml 3..\n  kx yaml 1 --show-managed-fields",
+		Args:        minArgs(1),
 		Annotations: documentAnnotations,
-		// No Args validator: cobra's arity check runs against the
-		// unstripped argv, which counts forwarded kubectl flags as
-		// positional arguments — and `--help` is a single argument that a
-		// gate would reject before passthrough could resolve it. The real
-		// arity check happens below.
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			show, rest, err := extractString(rest, "--show", "")
-			if err != nil {
-				return err
-			}
-			indexArgs, rest := splitLeadingIndexes(rest)
-			if len(indexArgs) == 0 {
-				if len(rest) > 0 {
-					return fmt.Errorf(
-						"Invalid value for 'indexes': '%s' is not a valid int.", rest[0])
-				}
-				return requiredArgsError(cmd)
-			}
-			extra := rest
-			resolved, err := resolveRefs(services.State, "indexes", indexArgs)
-			if err != nil {
-				return err
-			}
-			if err := refuseScopeFlagResolved(resolved, extra); err != nil {
-				return err
-			}
-			// --show narrows the YAML it parsed, so another output format is a
-			// contradiction rather than a refinement — and left to kubectl the
-			// two would silently produce whichever -o came last.
-			if show != "" && hasFlag(extra, "--output", "-o") {
-				return fmt.Errorf(
-					"'--show' cannot be combined with an output format — it narrows the " +
-						"YAML manifest it parsed. Drop one of the two.")
-			}
-			var fields []string
-			if show != "" {
-				for _, field := range strings.Split(show, ",") {
-					if trimmed := strings.TrimSpace(field); trimmed != "" {
-						fields = append(fields, trimmed)
-					}
-				}
-			}
-			command := YamlCommand{Kubectl: services.Kubectl, State: services.State}
-			first := true
-			return runEach(resolved, func(target Resolved) error {
-				if !first {
-					// YAML's own document separator, not a blank line:
-					// several manifests on stdout are one stream, and
-					// separated by a blank line they parsed as a single
-					// document with every key repeated.
-					render.Raw("---")
-				}
-				first = false
-				// Banner per manifest, on stderr: without it, several
-				// manifests run together with nothing saying which is which.
-				banner(cmd, target, "")
-				stop := render.Status("fetching manifest")
-				output, err := command.Execute(target.Ref, fields, extra)
-				stop()
-				if err != nil {
-					return err
-				}
-				// Trimmed: the blank line above the next banner is the only
-				// separator. Kept as well, a manifest's trailing newline put
-				// two between every pair and one after the last.
-				render.Raw(strings.TrimRight(output, "\n"))
-				return nil
-			})
-		},
 	}
-	// Parsed by hand, registered only so it appears in --help instead of
-	// vanishing.
 	cmd.Flags().String("show", "", "Comma-separated fields to display (e.g. metadata,spec)")
+	kubectlFlags := registerKubectlFlags(cmd, "get")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		show, _ := cmd.Flags().GetString("show")
+		indexArgs, extra, err := indexArgv(cmd, args, kubectlFlags)
+		if err != nil {
+			return err
+		}
+		resolved, err := resolveRefs(services.State, "indexes", indexArgs)
+		if err != nil {
+			return err
+		}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		// --show narrows the YAML it parsed, so another output format is a
+		// contradiction rather than a refinement — and left to kubectl the
+		// two would silently produce whichever -o came last.
+		if show != "" && hasFlag(extra, "--output", "-o") {
+			return fmt.Errorf(
+				"'--show' cannot be combined with an output format — it narrows the " +
+					"YAML manifest it parsed. Drop one of the two.")
+		}
+		var fields []string
+		if show != "" {
+			for _, field := range strings.Split(show, ",") {
+				if trimmed := strings.TrimSpace(field); trimmed != "" {
+					fields = append(fields, trimmed)
+				}
+			}
+		}
+		command := YamlCommand{Kubectl: services.Kubectl, State: services.State}
+		first := true
+		return runEach(resolved, func(target Resolved) error {
+			if !first {
+				// YAML's own document separator, not a blank line:
+				// several manifests on stdout are one stream, and
+				// separated by a blank line they parsed as a single
+				// document with every key repeated.
+				render.Raw("---")
+			}
+			first = false
+			// Banner per manifest, on stderr: without it, several
+			// manifests run together with nothing saying which is which.
+			banner(cmd, target, "")
+			stop := render.Status("fetching manifest")
+			output, err := command.Execute(target.Ref, fields, extra)
+			stop()
+			if err != nil {
+				return err
+			}
+			// Trimmed: the blank line above the next banner is the only
+			// separator. Kept as well, a manifest's trailing newline put
+			// two between every pair and one after the last.
+			render.Raw(strings.TrimRight(output, "\n"))
+			return nil
+		})
+	}
 	return cmd
 }
 

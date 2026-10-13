@@ -532,10 +532,10 @@ func TestYamlUsesTheCallersOutputFormat(t *testing.T) {
 		t.Fatalf("kx yaml 1 -o json: %v", err)
 	}
 	got := joined(kube.runs[0])
-	if got != "get Pod nginx -n prod -o json" {
-		t.Errorf("argv = %q, want one -o, the caller's", got)
+	if got != "get Pod nginx -n prod --output=json" {
+		t.Errorf("argv = %q, want one output format, the caller's", got)
 	}
-	if strings.Count(got, "-o ") != 1 {
+	if strings.Contains(got, "yaml") {
 		t.Errorf("argv = %q, want kx's own -o yaml dropped", got)
 	}
 }
@@ -601,7 +601,6 @@ func TestScaleRefusesAnExplicitReplicasFlag(t *testing.T) {
 // passthrough could resolve it.
 func TestNewlyForwardingCommandsHaveNoArgsValidator(t *testing.T) {
 	for name, cmd := range map[string]*cobra.Command{
-		"yaml":     newYamlCommand(Services{}),
 		"label":    newMetadataWriteCommand(Services{}, "label", "labels", "", ""),
 		"annotate": newMetadataWriteCommand(Services{}, "annotate", "annotations", "", ""),
 	} {
