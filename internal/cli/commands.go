@@ -979,16 +979,6 @@ func reportChange(extra []string, output string, lines ...string) {
 	}
 }
 
-// splitLeadingPositionals splits args at the first flag.
-func splitLeadingPositionals(args []string) (positionals, rest []string) {
-	for i, arg := range args {
-		if strings.HasPrefix(arg, "-") {
-			return args[:i], args[i:]
-		}
-	}
-	return args, nil
-}
-
 // newSwitchCommand builds the namespace and context commands, which share a
 // shape: no argument lists, an index switches.
 func newSwitchCommand(services Services, use, alias, short string, isContext bool) *cobra.Command {
