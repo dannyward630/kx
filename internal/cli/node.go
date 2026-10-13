@@ -167,47 +167,12 @@ func newDrainCommand(services Services) *cobra.Command {
 			"command is a way to take a cluster down by typo.\n\n" +
 			"kubectl's own drain flags pass through — a drain usually needs " +
 			"--ignore-daemonsets, and often --delete-emptydir-data.",
-		Example: "  kx drain 1\n  kx drain 1 --ignore-daemonsets\n  kx drain 1 -y --ignore-daemonsets --delete-emptydir-data",
-		// Flags are parsed by hand so kubectl's own reach it untouched. No Args
-		// validator: cobra checks arity against the unstripped argv, which
-		// would answer `kx drain --help` with an arity error instead of help.
-		Annotations:        mutatingAnnotations,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			yes, rest := extractBool(rest, "--yes", "-y")
-			// Only with --yes: without it, the confirm prompt already names the
-			// listing's provenance (listingProvenance).
-			if yes {
-				installAgentIndexNotice(services)
-			}
-			if len(rest) == 0 {
-				return requiredArgsError(cmd)
-			}
-			ref, err := parseRef("index", rest[0])
-			if err != nil {
-				return err
-			}
-			_, namespace, kind, err := services.State.Resolve(ref)
-			if err != nil {
-				return err
-			}
-			resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
-			if err := refuseScopeFlagResolved(resolved, rest[1:]); err != nil {
-				return err
-			}
-			return DrainCommand{
-				Kubectl: services.Kubectl,
-				State:   services.State,
-				Confirm: services.confirm(),
-			}.Execute(ref, yes, rest[1:])
-		},
+		Example:     "  kx drain 1\n  kx drain 1 --ignore-daemonsets\n  kx drain 1 -y --ignore-daemonsets --delete-emptydir-data",
+		Args:        minArgs(1),
+		Annotations: mutatingAnnotations,
 	}
-	// Registered so they appear in --help; parsing is by hand.
 	cmd.Flags().BoolP("yes", "y", false, "Skip the confirmation prompt")
+	// kubectl's drain flags, documented in kx's words.
 	cmd.Flags().Bool("ignore-daemonsets", false,
 		"Continue even though DaemonSet-managed pods cannot be evicted")
 	cmd.Flags().Bool("delete-emptydir-data", false,
@@ -217,6 +182,37 @@ func newDrainCommand(services Services) *cobra.Command {
 	cmd.Flags().Int("grace-period", -1,
 		"Seconds to give each pod to terminate; -1 uses the pod's own")
 	cmd.Flags().Duration("timeout", 0, "Give up waiting after this long")
+	kubectlFlags := registerKubectlFlags(cmd, "drain")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		yes, _ := cmd.Flags().GetBool("yes")
+		// Only with --yes: without it, the confirm prompt already names the
+		// listing's provenance (listingProvenance).
+		if yes {
+			installAgentIndexNotice(services)
+		}
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		if len(positional) == 0 {
+			return requiredArgsError(cmd)
+		}
+		ref, err := parseRef("index", positional[0])
+		if err != nil {
+			return err
+		}
+		_, namespace, kind, err := services.State.Resolve(ref)
+		if err != nil {
+			return err
+		}
+		extra := append(positional[1:len(positional):len(positional)], forward...)
+		resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		return DrainCommand{
+			Kubectl: services.Kubectl,
+			State:   services.State,
+			Confirm: services.confirm(),
+		}.Execute(ref, yes, extra)
+	}
 	return cmd
 }
 
