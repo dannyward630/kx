@@ -1673,3 +1673,32 @@ func TestCopyParsesKubectlFlags(t *testing.T) {
 		}
 	}
 }
+
+// kx yaml parses kubectl get's flags; --show is kx's own, and is still
+// refused beside an output format in any spelling.
+func TestYamlParsesKubectlFlags(t *testing.T) {
+	kube, err := indexCommand(t, newYamlCommand, "--show-managed-fields", "1")
+	if err != nil {
+		t.Fatalf("kx yaml --show-managed-fields 1: %v", err)
+	}
+	if len(kube.runs) != 1 || joinArgs(kube.runs[0]) != "get Pod nginx -n prod -o yaml --show-managed-fields" {
+		t.Errorf("kubectl = %q, want the manifest with kubectl's --show-managed-fields", kube.runs)
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--show", "spec", "-ojson", "1"}, "'--show' cannot be combined with an output format"},
+		{[]string{"-n", "other", "1"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"1", "--bogus"}, "'--bogus' isn't a flag of kubectl get"},
+		{[]string{"--show", "spec"}, "requires <index>"},
+	} {
+		kube, err := indexCommand(t, newYamlCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx yaml %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.runs) > 0 {
+			t.Errorf("kx yaml %s: kubectl was called: %q", joinArgs(tc.args), kube.runs)
+		}
+	}
+}
