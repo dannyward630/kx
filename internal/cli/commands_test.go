@@ -913,7 +913,7 @@ func TestPortForwardHelpDoesNotTriggerAnArityError(t *testing.T) {
 func TestDebugWithoutAnIndexSaysSo(t *testing.T) {
 	cmd := newDebugCommand(Services{})
 
-	err := cmd.RunE(cmd, []string{"--"})
+	err := executeArgv(cmd, []string{"--"})
 
 	if err == nil {
 		t.Fatal("debug with no index succeeded")
@@ -1423,5 +1423,48 @@ func TestExecParsesKubectlFlagsUpToTheCommand(t *testing.T) {
 	}
 	if doc := commandHelp(newExecCommand(Services{})).Doc; strings.Contains(doc, "put it after `--`") {
 		t.Errorf("kx exec --help offers -- for kubectl's flags, but -- starts the command:\n%s", doc)
+	}
+}
+
+// kx debug parses kubectl debug's flags up to --. Its --image is kx's to read
+// as well as kubectl's, in any spelling and any position; its --profile is
+// kubectl debug's own, which shadows kubectl's global --profile.
+func TestDebugParsesKubectlFlagsUpToTheCommand(t *testing.T) {
+	kube, err := indexCommand(t, newDebugCommand, "--image", "alpine", "1", "--profile", "general", "--", "ls", "-o")
+	if err != nil {
+		t.Fatalf("kx debug --image alpine 1 --profile general -- ls -o: %v", err)
+	}
+	if len(kube.interactive) != 1 {
+		t.Fatalf("kubectl = %q, want one debug", kube.interactive)
+	}
+	got := joinArgs(kube.interactive[0])
+	for _, want := range []string{"alpine", "--profile=general"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("kubectl = %q, want it to carry %q", got, want)
+		}
+	}
+	if !strings.HasSuffix(got, " -- ls -o") || strings.Count(got, "ls -o") != 1 {
+		t.Errorf("kubectl = %q, want the command once, after --", got)
+	}
+	if profile := newDebugCommand(Services{}).Flags().Lookup("profile"); profile == nil ||
+		!strings.Contains(profile.Usage, "general") {
+		t.Errorf("--profile = %+v, want kubectl debug's own, not the global pprof flag", profile)
+	}
+
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--image=x"}, "requires <index>"},
+		{[]string{"-n", "other", "1"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"1", "--bogus"}, "Everything after -- is the command to run"},
+	} {
+		kube, err := indexCommand(t, newDebugCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx debug %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.interactive) > 0 {
+			t.Errorf("kx debug %s: kubectl was called: %q", joinArgs(tc.args), kube.interactive)
+		}
 	}
 }

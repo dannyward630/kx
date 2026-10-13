@@ -457,50 +457,43 @@ func newDebugCommand(services Services) *cobra.Command {
 			"apply, since there is no container to share a namespace with.",
 		Example: "  kx debug 1\n  kx debug 1 --image alpine\n" +
 			"  kx debug 1 -- ls /proc/1/root\n  kx debug 1 -- ls /host/var/log",
-		Args:               minArgs(1),
-		Annotations:        mutatingDocumentAnnotations,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			before, command := splitAtDoubleDash(args)
-			rest, handled, err := passthrough(cmd, before, nil)
-			if err != nil || handled {
-				return err
-			}
-			// `kx debug --` satisfies the arity check on the unstripped argv
-			// and leaves nothing once the command is split off. A leading flag
-			// does not land here — passthrough keeps unknown flags for kubectl,
-			// so `kx debug --image=x` reaches parseIndex with the flag as its
-			// candidate, and reports it as one. That is exec's behaviour too,
-			// and the two should not diverge on the same mistake.
-			if len(rest) == 0 {
-				return requiredArgsError(cmd)
-			}
-			installAgentIndexNotice(services)
-			ref, err := parseRef("index", rest[0])
-			if err != nil {
-				return err
-			}
-			_, namespace, kind, err := services.State.Resolve(ref)
-			if err != nil {
-				return err
-			}
-			resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
-			if err := refuseScopeFlagResolved(resolved, rest[1:]); err != nil {
-				return err
-			}
-			return DebugCommand{
-				Kubectl: services.Kubectl, State: services.State,
-				Image: services.Config.DebugImage,
-			}.Execute(ref, command, rest[1:])
-		},
+		Args:        minArgs(1),
+		Annotations: mutatingDocumentAnnotations,
 	}
-	// Read by hand out of the passthrough args — kx acts on both, rather than
-	// only forwarding them — so they have to be registered too, or they work
-	// and are invisible to `kx debug --help`.
+	// kubectl's flags that kx acts on as well as forwarding, registered first
+	// so they keep kx's usage.
 	cmd.Flags().String("image", "",
 		"Image for the debug container (default: the debug_image config key)")
 	cmd.Flags().String("target", "",
 		"Container to share a process namespace with, for a pod with several; not for nodes")
+	kubectlFlags := registerKubectlFlags(cmd, "debug")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		// Everything after -- is the command to run in the debug container.
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		command := afterDash(cmd, args)
+		// `kx debug --` and `kx debug --image=x` both leave no index.
+		if len(positional) == 0 {
+			return requiredArgsError(cmd)
+		}
+		installAgentIndexNotice(services)
+		ref, err := parseRef("index", positional[0])
+		if err != nil {
+			return err
+		}
+		_, namespace, kind, err := services.State.Resolve(ref)
+		if err != nil {
+			return err
+		}
+		extra := append(positional[1:len(positional):len(positional)], forward...)
+		resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		return DebugCommand{
+			Kubectl: services.Kubectl, State: services.State,
+			Image: services.Config.DebugImage,
+		}.Execute(ref, command, extra)
+	}
 	return cmd
 }
 
