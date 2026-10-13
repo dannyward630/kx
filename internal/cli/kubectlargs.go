@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -48,6 +49,27 @@ const kubectlCommandAnnotation = "kx/kubectl-command"
 // kubectlArgs collects the kubectl flags given to one command, in order.
 type kubectlArgs struct {
 	tokens []string
+	// definedBy names, for each subcommand flag registered, the subcommands
+	// that define it, on a command that forwards to more than one (kx top:
+	// top pod or top node). Global flags are not in it: every subcommand
+	// takes them.
+	definedBy map[string][]string
+}
+
+// outside returns the first kubectl flag given on the command that subcommand
+// does not define, by its long name, or "" when there is none. A command that
+// registered the flags of several subcommands calls it once it knows which
+// one it will run, so a flag of the other is refused in kx's words rather than
+// kubectl's.
+func (a *kubectlArgs) outside(flags *pflag.FlagSet, subcommand string) string {
+	found := ""
+	flags.Visit(func(flag *pflag.Flag) {
+		definers, ok := a.definedBy[flag.Name]
+		if found == "" && ok && !slices.Contains(definers, subcommand) {
+			found = "--" + flag.Name
+		}
+	})
+	return found
 }
 
 // add records one occurrence of flag with value, spelled the way kx forwards
@@ -82,8 +104,11 @@ func (v *kubectlValue) String() string { return v.value }
 // Type is kubectl's own, so help names the value the way kubectl's does.
 func (v *kubectlValue) Type() string { return v.flag.Type }
 
-// registerKubectlFlags registers every flag kubectl defines on subcommand, and
-// kubectl's global flags, on cmd, and returns the argv they record.
+// registerKubectlFlags registers every flag kubectl defines on subcommands,
+// and kubectl's global flags, on cmd, and returns the argv they record. A
+// command that runs one of several subcommands, decided after parsing (kx top:
+// top pod or top node), registers all of them and asks the result which flags
+// fall outside the one it chose (see outside).
 //
 // A flag cmd already registered is shared: kx reads it as well as forwarding
 // it. It keeps kx's usage text, which says what kx does with it, and takes
@@ -93,12 +118,8 @@ func (v *kubectlValue) Type() string { return v.flag.Type }
 //
 // Flag names are normalized as kubectl normalizes them, so --all_namespaces
 // is --all-namespaces here as it is there.
-func registerKubectlFlags(cmd *cobra.Command, subcommand string) *kubectlArgs {
-	own, ok := kubectlflags.Command(subcommand)
-	if !ok {
-		panic("kubectlflags has no table for kubectl " + subcommand)
-	}
-	args := &kubectlArgs{}
+func registerKubectlFlags(cmd *cobra.Command, subcommands ...string) *kubectlArgs {
+	args := &kubectlArgs{definedBy: map[string][]string{}}
 	flags := cmd.Flags()
 	flags.SetNormalizeFunc(wordSepNormalize)
 	register := func(flag kubectlflags.Flag, where string) {
@@ -119,13 +140,24 @@ func registerKubectlFlags(cmd *cobra.Command, subcommand string) *kubectlArgs {
 		registered.Hidden = flag.Hidden
 		registered.Annotations = map[string][]string{kubectlFlagAnnotation: {where}}
 	}
-	for _, flag := range own {
-		register(flag, kubectlFlagCommand)
+	for _, subcommand := range subcommands {
+		own, ok := kubectlflags.Command(subcommand)
+		if !ok {
+			panic("kubectlflags has no table for kubectl " + subcommand)
+		}
+		for _, flag := range own {
+			// The first subcommand to define a flag registers it; the
+			// others only add themselves to its definers.
+			if _, seen := args.definedBy[flag.Name]; !seen {
+				register(flag, kubectlFlagCommand)
+			}
+			args.definedBy[flag.Name] = append(args.definedBy[flag.Name], subcommand)
+		}
 	}
 	for _, flag := range kubectlflags.Global() {
 		// A subcommand's flag shadows a global one of the same name — kubectl
 		// debug's --profile — and is already registered by the loop above.
-		if flags.Lookup(flag.Name) != nil && isKubectlFlag(flags.Lookup(flag.Name)) {
+		if _, shadowed := args.definedBy[flag.Name]; shadowed {
 			continue
 		}
 		register(flag, kubectlFlagGlobal)
@@ -134,8 +166,8 @@ func registerKubectlFlags(cmd *cobra.Command, subcommand string) *kubectlArgs {
 	if cmd.Annotations == nil {
 		cmd.Annotations = map[string]string{}
 	}
-	cmd.Annotations[kubectlCommandAnnotation] = subcommand
-	cmd.SetFlagErrorFunc(unknownFlagError)
+	cmd.Annotations[kubectlCommandAnnotation] = strings.Join(subcommands, ",")
+	cmd.SetFlagErrorFunc(flagError)
 	recorders.Store(cmd, args)
 	return args
 }
@@ -179,13 +211,23 @@ func wordSepNormalize(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 	return pflag.NormalizedName(strings.ReplaceAll(name, "_", "-"))
 }
 
-// unknownFlagError replaces pflag's "unknown flag" with what kx knows about it.
+// flagError puts the two flag errors pflag raises on a converted command into
+// kx's words.
 //
-// The flag table is read from one kubectl release, so a flag newer than it is
-// unknown here though the kubectl on PATH would take it. Anything after `--`
-// reaches kubectl unread, which is the way through; kx --version names both
-// kubectls when the difference needs explaining.
-func unknownFlagError(cmd *cobra.Command, err error) error {
+// An unknown flag: the flag table is read from one kubectl release, so a flag
+// newer than it is unknown here though the kubectl on PATH would take it.
+// Anything after `--` reaches kubectl unread, which is the way through; kx
+// --version names both kubectls when the difference needs explaining.
+//
+// A malformed value for one of kx's own typed flags (kx top's --port): the
+// same sentence kx uses for a malformed index. kubectl's flags never raise it,
+// since kx forwards their values for kubectl to judge.
+func flagError(cmd *cobra.Command, err error) error {
+	var invalid *pflag.InvalidValueError
+	if errors.As(err, &invalid) {
+		return fmt.Errorf("Invalid value for '--%s': '%s' is not a valid %s.",
+			invalid.GetFlag().Name, invalid.GetValue(), invalid.GetFlag().Value.Type())
+	}
 	var missing *pflag.NotExistError
 	if !errors.As(err, &missing) {
 		return err
@@ -195,9 +237,19 @@ func unknownFlagError(cmd *cobra.Command, err error) error {
 		spelling = "-" + missing.GetSpecifiedName()
 	}
 	return fmt.Errorf(
-		"The flag '%s' isn't one kx knows — its table of kubectl's flags is "+
-			"from kubectl %s. To pass it to kubectl anyway, put it after --: '%s -- %s'.",
-		spelling, kubectlflags.Version, requiredUse(cmd), spelling)
+		"'%s' isn't a flag of %s as of %s, the release kx's table of its flags "+
+			"was read from. If your kubectl takes it, put it after --: '%s -- %s'.",
+		spelling, kubectlSubcommands(cmd), kubectlflags.Version, requiredUse(cmd), spelling)
+}
+
+// kubectlSubcommands names the kubectl subcommands cmd forwards to: "kubectl
+// get", or "kubectl top pod or kubectl top node".
+func kubectlSubcommands(cmd *cobra.Command) string {
+	var names []string
+	for _, subcommand := range strings.Split(cmd.Annotations[kubectlCommandAnnotation], ",") {
+		names = append(names, "kubectl "+subcommand)
+	}
+	return strings.Join(names, " or ")
 }
 
 // requiredUse is cmd's path and its required arguments, the shortest

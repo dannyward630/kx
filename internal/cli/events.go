@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jzills/kx/internal/config"
@@ -133,6 +131,7 @@ func newEventsCommand(services Services) *cobra.Command {
 }
 
 func newTopCommand(services Services) *cobra.Command {
+	var kubectlFlags *kubectlArgs
 	cmd := &cobra.Command{
 		Use:        "top [resource] [kubectl flags]",
 		SuggestFor: []string{"usage", "metrics", "stats"},
@@ -141,168 +140,162 @@ func newTopCommand(services Services) *cobra.Command {
 		Example: "  kx top\n  kx top nodes\n  kx top -m web\n  kx top --no-limits\n" +
 			"  kx top --html\n  kx top --json\n  kx top --out top.html",
 		// `resource` means something narrower here than it does to kx get.
-		Annotations:        map[string]string{"arg.resource": "pods (the default) or nodes"},
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			match, rest, err := extractString(rest, "--match", "-m")
-			if err != nil {
-				return err
-			}
-			// Refused before kubectl is asked, as kx get refuses it.
-			if match != "" {
-				if err := matchFormatError(rest); err != nil {
-					return err
-				}
-			}
-			noLimits, rest := extractBool(rest, "--no-limits")
-			asJSON, rest := extractBool(rest, "--json")
-			html, rest := extractBool(rest, "--html")
-			noOpen, rest := extractBool(rest, "--no-open")
-			out, rest, err := extractString(rest, "--out", "")
-			if err != nil {
-				return err
-			}
-			hasPort := hasFlag(rest, "--port", "")
-			portText, rest, err := extractString(rest, "--port", "")
-			if err != nil {
-				return err
-			}
-			port := 0
-			if portText != "" {
-				if port, err = strconv.Atoi(portText); err != nil {
-					return fmt.Errorf(
-						"Invalid value for '--port': '%s' is not a valid int.", portText)
-				}
-			}
-			wantsHTML := impliedHTML(html, out)
-			htmlOpts := htmlOptions{Enabled: wantsHTML, Port: port, NoOpen: noOpen, Out: out}
-			if err := htmlOpts.validate(hasPort, noOpen); err != nil {
-				return err
-			}
-			if asJSON && wantsHTML {
-				return fmt.Errorf(
-					"'--json' cannot be combined with '%s' — one is for a "+
-						"machine and the other for a browser.", htmlFlagName(html))
-			}
-			// Both are built from the numbered rows, and another cluster's
-			// listing has none: the document would report an empty namespace.
-			crossCluster := clusterFlagIn(rest)
-			if crossCluster != "" && (asJSON || wantsHTML) {
-				flag := "--json"
-				if wantsHTML {
-					flag = htmlFlagName(html)
-				}
-				return fmt.Errorf(
-					"'%s' cannot be combined with '%s' — kx can't index another "+
-						"cluster's listing, and the report is built from the indexed one.",
-					flag, crossCluster)
-			}
-
-			// A leading non-flag token names the resource type, mirroring
-			// how `kx get`/`kx <kind>` resolve kind shorthands. A
-			// recognized Pod or Node shorthand is consumed either way —
-			// `kx top pods` must strip "pods" the same way `kx top nodes`
-			// strips "nodes", or it leaks through to kubectl as a pod-name
-			// filter instead of a resource type. Anything else (including
-			// no token at all) falls through to the pods path completely
-			// unchanged, exactly as it worked before this argument existed.
-			nodes := false
-			topArg := ""
-			if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
-				switch kinds.Normalize(rest[0]) {
-				case kinds.Node:
-					nodes = true
-					topArg = "nodes"
-					rest = rest[1:]
-				case kinds.Pod:
-					rest = rest[1:]
-				}
-			}
-
-			// kubectl rejects -A on `top node` with its own error, naming its
-			// own command; -n it accepts and ignores. Both are refused here
-			// instead, in kx's voice and before kubectl is spawned, because a
-			// Node has no namespace either flag could be talking about. kx top
-			// pods is untouched — see clusterScopedScopeError.
-			if nodes {
-				if flag := scopeFlagIn(rest); flag != "" {
-					return clusterScopedScopeError(flag, "nodes")
-				}
-				// --no-limits skips the second kubectl call that fetches each
-				// pod's limits, so the percentage columns can be computed.
-				// kubectl reports a node's own CPU%/MEM% against its capacity,
-				// in the same table — there is no extra call to skip and no
-				// column that goes away, so the flag did nothing at all here.
-				if noLimits {
-					return errors.New(
-						"'--no-limits' cannot be combined with 'nodes' — kubectl " +
-							"reports a node's CPU% and MEM% against its capacity, " +
-							"in the same call, so there are no limits to skip.")
-				}
-			}
-
-			output, resourceLabel, namespace, scopedAllNamespaces, err :=
-				topListing(services, nodes, match, rest, noLimits, "")
-			if err != nil {
-				return err
-			}
-			if asJSON {
-				// namespace is the caption's by this point: an -A listing has
-				// had it overwritten with the words "all namespaces" just
-				// above, and putting that in a document is what kx scan's
-				// "scope" used to do — indistinguishable from a namespace
-				// genuinely called that. The boolean carries the scope instead.
-				//
-				// A node listing needs no guard of its own: ExecuteNodes
-				// returns an empty namespace because a Node is cluster-scoped,
-				// so there is nothing here to blank.
-				subject := scanSubject{
-					Namespace: namespace, AllNamespaces: scopedAllNamespaces, Match: match,
-				}
-				if scopedAllNamespaces {
-					subject.Namespace = ""
-				}
-				document, err := topJSON(subject, resourceLabel, topPageRows(output))
-				if err != nil {
-					return err
-				}
-				render.Raw(document)
-				return nil
-			}
-			if crossCluster != "" {
-				render.Caption(crossClusterCaption(crossCluster))
-			}
-			render.IndexedTable(output, resourceLabel, namespace)
-			// As for kx get (showListing): only a listing kx saved replaced
-			// one, so only under that is there a way back to offer.
-			if output.Empty() && !output.Unnumbered {
-				render.PreviousListingNote(previousListing(services))
-			}
-			if !htmlOpts.Enabled {
-				return nil
-			}
-
-			label := kinds.PluralDisplay(resourceLabel)
-			meta, err := pageMeta(services.Config.Theme, "top · "+label,
-				invocation("top", topArg, scopeArgs(namespace, scopedAllNamespaces), matchFlag(match), portFlag(port)))
-			if err != nil {
-				return err
-			}
-			page, err := web.RenderTop(web.TopPage{
-				Meta: meta, Scope: scopeCaption(label, namespace), Match: match,
-				Rows: topPageRows(output),
-			})
-			if err != nil {
-				return err
-			}
-			return deliverPage(cmd.Context(), page, htmlOpts)
-		},
+		Annotations: map[string]string{"arg.resource": "pods (the default) or nodes"},
 	}
-	// Registered so they appear in the command's help; parsing is by hand.
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		flags := cmd.Flags()
+		match, _ := flags.GetString("match")
+		// Refused before kubectl is asked, as kx get refuses it.
+		if match != "" {
+			if err := matchFormatError(forward); err != nil {
+				return err
+			}
+		}
+		noLimits, _ := flags.GetBool("no-limits")
+		asJSON, _ := flags.GetBool("json")
+		html, _ := flags.GetBool("html")
+		noOpen, _ := flags.GetBool("no-open")
+		out, _ := flags.GetString("out")
+		hasPort := flags.Changed("port")
+		port, _ := flags.GetInt("port")
+		wantsHTML := impliedHTML(html, out)
+		htmlOpts := htmlOptions{Enabled: wantsHTML, Port: port, NoOpen: noOpen, Out: out}
+		if err := htmlOpts.validate(hasPort, noOpen); err != nil {
+			return err
+		}
+		if asJSON && wantsHTML {
+			return fmt.Errorf(
+				"'--json' cannot be combined with '%s' — one is for a "+
+					"machine and the other for a browser.", htmlFlagName(html))
+		}
+		// Both are built from the numbered rows, and another cluster's
+		// listing has none: the document would report an empty namespace.
+		crossCluster := clusterFlagIn(forward)
+		if crossCluster != "" && (asJSON || wantsHTML) {
+			flag := "--json"
+			if wantsHTML {
+				flag = htmlFlagName(html)
+			}
+			return fmt.Errorf(
+				"'%s' cannot be combined with '%s' — kx can't index another "+
+					"cluster's listing, and the report is built from the indexed one.",
+				flag, crossCluster)
+		}
+
+		// A leading non-flag token names the resource type, mirroring
+		// how `kx get`/`kx <kind>` resolve kind shorthands. A
+		// recognized Pod or Node shorthand is consumed either way —
+		// `kx top pods` must strip "pods" the same way `kx top nodes`
+		// strips "nodes", or it leaks through to kubectl as a pod-name
+		// filter instead of a resource type. Anything else (including
+		// no token at all) falls through to the pods path completely
+		// unchanged, exactly as it worked before this argument existed.
+		nodes := false
+		topArg := ""
+		if len(positional) > 0 {
+			switch kinds.Normalize(positional[0]) {
+			case kinds.Node:
+				nodes = true
+				topArg = "nodes"
+				positional = positional[1:]
+			case kinds.Pod:
+				positional = positional[1:]
+			}
+		}
+		// What follows the resource is kubectl's, then its flags.
+		rest := append(positional[:len(positional):len(positional)], forward...)
+
+		// kubectl rejects -A on `top node` with its own error, naming its
+		// own command; -n it accepts and ignores. Both are refused here
+		// instead, in kx's voice and before kubectl is spawned, because a
+		// Node has no namespace either flag could be talking about. kx top
+		// pods is untouched — see clusterScopedScopeError.
+		if nodes {
+			if flag := scopeFlagIn(rest); flag != "" {
+				return clusterScopedScopeError(flag, "nodes")
+			}
+			// --no-limits skips the second kubectl call that fetches each
+			// pod's limits, so the percentage columns can be computed.
+			// kubectl reports a node's own CPU%/MEM% against its capacity,
+			// in the same table — there is no extra call to skip and no
+			// column that goes away, so the flag did nothing at all here.
+			if noLimits {
+				return errors.New(
+					"'--no-limits' cannot be combined with 'nodes' — kubectl " +
+						"reports a node's CPU% and MEM% against its capacity, " +
+						"in the same call, so there are no limits to skip.")
+			}
+		}
+		// kx top registers the flags of both kubectl top pod and kubectl
+		// top node, since which one runs is only known now. A flag of the
+		// other is refused here, naming the resource it does not fit.
+		subcommand, resource := "top pod", "pods"
+		if nodes {
+			subcommand, resource = "top node", "nodes"
+		}
+		if flag := kubectlFlags.outside(flags, subcommand); flag != "" {
+			return fmt.Errorf(
+				"'%s' cannot be combined with '%s' — it is a flag of kubectl %s only.",
+				flag, resource, otherTopSubcommand(subcommand))
+		}
+
+		output, resourceLabel, namespace, scopedAllNamespaces, err :=
+			topListing(services, nodes, match, rest, noLimits, "")
+		if err != nil {
+			return err
+		}
+		if asJSON {
+			// namespace is the caption's by this point: an -A listing has
+			// had it overwritten with the words "all namespaces" just
+			// above, and putting that in a document is what kx scan's
+			// "scope" used to do — indistinguishable from a namespace
+			// genuinely called that. The boolean carries the scope instead.
+			//
+			// A node listing needs no guard of its own: ExecuteNodes
+			// returns an empty namespace because a Node is cluster-scoped,
+			// so there is nothing here to blank.
+			subject := scanSubject{
+				Namespace: namespace, AllNamespaces: scopedAllNamespaces, Match: match,
+			}
+			if scopedAllNamespaces {
+				subject.Namespace = ""
+			}
+			document, err := topJSON(subject, resourceLabel, topPageRows(output))
+			if err != nil {
+				return err
+			}
+			render.Raw(document)
+			return nil
+		}
+		if crossCluster != "" {
+			render.Caption(crossClusterCaption(crossCluster))
+		}
+		render.IndexedTable(output, resourceLabel, namespace)
+		// As for kx get (showListing): only a listing kx saved replaced
+		// one, so only under that is there a way back to offer.
+		if output.Empty() && !output.Unnumbered {
+			render.PreviousListingNote(previousListing(services))
+		}
+		if !htmlOpts.Enabled {
+			return nil
+		}
+
+		label := kinds.PluralDisplay(resourceLabel)
+		meta, err := pageMeta(services.Config.Theme, "top · "+label,
+			invocation("top", topArg, scopeArgs(namespace, scopedAllNamespaces), matchFlag(match), portFlag(port)))
+		if err != nil {
+			return err
+		}
+		page, err := web.RenderTop(web.TopPage{
+			Meta: meta, Scope: scopeCaption(label, namespace), Match: match,
+			Rows: topPageRows(output),
+		})
+		if err != nil {
+			return err
+		}
+		return deliverPage(cmd.Context(), page, htmlOpts)
+	}
 	cmd.Flags().StringP("match", "m", "", matchUsage)
 	cmd.Flags().Bool("no-limits", false,
 		"Skip the CPU%/MEM% columns (one fewer kubectl call)")
@@ -311,12 +304,21 @@ func newTopCommand(services Services) *cobra.Command {
 	cmd.Flags().Int("port", 0, "Port to serve the HTML report on; 0 picks a free one")
 	cmd.Flags().Bool("no-open", false, "Serve the HTML report without opening a browser")
 	cmd.Flags().String("out", "", "Write the HTML report to this file instead of serving it in a browser")
-	// Pure kubectl passthrough, parsed by hand like every other flag here —
-	// registered only so they appear in --help instead of vanishing.
+	// kubectl's flags that kx also reads, registered first so they keep kx's
+	// own usage; registerKubectlFlags gives them kubectl's shape.
 	cmd.Flags().StringP("namespace", "n", "",
 		"Namespace to list pods from; defaults to the current namespace. Not for nodes, which are not in a namespace")
 	cmd.Flags().Bool("no-headers", false, "Leave out the header row; kx can't number a table without one")
 	cmd.Flags().BoolP("all-namespaces", "A", false,
 		"List pods across every namespace; each row is indexed and carries its own namespace. Not for nodes, which are not in a namespace")
+	kubectlFlags = registerKubectlFlags(cmd, "top pod", "top node")
 	return cmd
+}
+
+// otherTopSubcommand is the kubectl top subcommand kx top did not choose.
+func otherTopSubcommand(chosen string) string {
+	if chosen == "top node" {
+		return "top pod"
+	}
+	return "top node"
 }
