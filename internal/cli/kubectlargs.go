@@ -253,6 +253,13 @@ func flagError(cmd *cobra.Command, err error) error {
 	if missing.GetSpecifiedShortnames() != "" {
 		spelling = "-" + missing.GetSpecifiedName()
 	}
+	if trailingCommand(cmd) {
+		return fmt.Errorf(
+			"'%s' isn't a flag of %s as of %s, the release kx's table of its "+
+				"flags was read from. Everything after -- is the command to run, "+
+				"so a flag kx doesn't know needs %s itself.",
+			spelling, kubectlSubcommands(cmd), kubectlflags.Version, kubectlSubcommands(cmd))
+	}
 	return fmt.Errorf(
 		"'%s' isn't a flag of %s as of %s, the release kx's table of its flags "+
 			"was read from. If your kubectl takes it, put it after --: '%s -- %s'.",
@@ -282,15 +289,40 @@ func requiredUse(cmd *cobra.Command) string {
 }
 
 // kubectlArgv splits what cobra parsed into the positional arguments and the
-// argv for kubectl: the recorded flags, then anything after `--`, unread.
+// argv for kubectl: the recorded flags, then anything after `--`, unread. On a
+// command that runs a command of its own after `--` (see trailingCommand),
+// that is the command, not kubectl's, and is left for afterDash.
 func kubectlArgv(cmd *cobra.Command, args []string, recorded *kubectlArgs) (positional, forward []string) {
 	positional = args
 	var verbatim []string
 	if at := cmd.ArgsLenAtDash(); at >= 0 {
 		positional, verbatim = args[:at], args[at:]
 	}
+	if trailingCommand(cmd) {
+		verbatim = nil
+	}
 	forward = append(append([]string{}, recorded.tokens...), verbatim...)
 	return positional, forward
+}
+
+// afterDash is what follows `--` in args, nil when there is no `--`.
+func afterDash(cmd *cobra.Command, args []string) []string {
+	if at := cmd.ArgsLenAtDash(); at >= 0 {
+		return args[at:]
+	}
+	return nil
+}
+
+// trailingCommand reports whether cmd takes a command to run after `--` — kx
+// exec and kx debug, whose Use ends "[-- command...]". There `--` cannot
+// also be the way to hand kubectl a flag kx doesn't know.
+func trailingCommand(cmd *cobra.Command) bool {
+	for _, arg := range ParseUse(cmd.Use).Args {
+		if arg.Name == "command" {
+			return true
+		}
+	}
+	return false
 }
 
 // indexArgv splits a converted index command's parsed argv: the leading run of

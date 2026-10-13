@@ -1388,3 +1388,40 @@ func TestEditParsesKubectlFlags(t *testing.T) {
 		}
 	}
 }
+
+// kx exec parses kubectl exec's flags up to --, and everything after -- is the
+// command to run: a flag-shaped argument there is the command's own, never
+// kubectl's or kx's. That is also why a flag kx doesn't know cannot be passed
+// after -- on kx exec, and the refusal doesn't offer it.
+func TestExecParsesKubectlFlagsUpToTheCommand(t *testing.T) {
+	kube, err := indexCommand(t, newExecCommand, "-c", "app", "1", "--", "sh", "-c", "-o json")
+	if err != nil {
+		t.Fatalf("kx exec -c app 1 -- sh -c '-o json': %v", err)
+	}
+	if len(kube.interactive) != 1 {
+		t.Fatalf("kubectl = %q, want one exec", kube.interactive)
+	}
+	// Exactly: the command once, after --, and its -o never read as a flag.
+	if got, want := joinArgs(kube.interactive[0]), "exec -it nginx -n prod --container=app -- sh -c -o json"; got != want {
+		t.Errorf("kubectl = %q, want %q", got, want)
+	}
+
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-n", "other", "1"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"1", "--bogus"}, "Everything after -- is the command to run"},
+	} {
+		kube, err := indexCommand(t, newExecCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx exec %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.interactive)+len(kube.probes) > 0 {
+			t.Errorf("kx exec %s: kubectl was called: %q %q", joinArgs(tc.args), kube.interactive, kube.probes)
+		}
+	}
+	if doc := commandHelp(newExecCommand(Services{})).Doc; strings.Contains(doc, "put it after `--`") {
+		t.Errorf("kx exec --help offers -- for kubectl's flags, but -- starts the command:\n%s", doc)
+	}
+}

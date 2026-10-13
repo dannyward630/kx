@@ -253,6 +253,9 @@ func commandHelp(cmd *cobra.Command) render.CommandHelp {
 		doc = strings.TrimSpace(cmd.Short)
 	}
 	switch {
+	case cmd.Annotations[kubectlCommandAnnotation] != "" && trailingCommand(cmd):
+		// Here `--` starts the command to run, so it is no way through.
+		doc += "\n\nA flag kx doesn't know is refused."
 	case cmd.Annotations[kubectlCommandAnnotation] != "":
 		// Not passed through: kx knows kubectl's flags here, lists them below,
 		// and refuses one it does not know rather than guessing at its shape.
