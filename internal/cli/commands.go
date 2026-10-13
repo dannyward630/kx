@@ -731,33 +731,25 @@ func newCopyCommand(services Services) *cobra.Command {
 			"can name a path inside the pod as index:path.",
 		Example: "  kx cp 1:/var/log/app.log ./app.log\n" +
 			"  kx cp ./patch.conf 1:/etc/app/patch.conf",
-		// No Args validator: cobra's arity check runs against the
-		// unstripped argv, before passthrough can pull --help out of it —
-		// `kx cp --help` is a single argument, which would fail a
-		// MinimumNArgs(2) gate before RunE ever saw it. The real "need a
-		// source and a destination" check happens below, once passthrough
-		// has already resolved --help.
-		Annotations:        mutatingAnnotations,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			if len(rest) < 2 {
-				return requiredArgsError(cmd)
-			}
-			installAgentIndexNotice(services)
-			return CopyCommand{Kubectl: services.Kubectl, State: services.State}.
-				Execute(rest[0], rest[1], rest[2:])
-		},
+		Args:        minArgs(2),
+		Annotations: mutatingAnnotations,
 	}
-	// Pure kubectl passthrough, parsed by hand — registered only so they
-	// appear in --help instead of vanishing.
+	// kubectl's flags, documented in kx's words.
 	cmd.Flags().StringP("container", "c", "", "Container name, if the pod has more than one")
 	cmd.Flags().Bool("no-preserve", false,
 		"Don't preserve the copied file/directory's ownership and permissions")
 	cmd.Flags().Int("retries", 0, "Number of retries on a copy failure (0 disables)")
+	kubectlFlags := registerKubectlFlags(cmd, "cp")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		if len(positional) < 2 {
+			return requiredArgsError(cmd)
+		}
+		installAgentIndexNotice(services)
+		extra := append(positional[2:len(positional):len(positional)], forward...)
+		return CopyCommand{Kubectl: services.Kubectl, State: services.State}.
+			Execute(positional[0], positional[1], extra)
+	}
 	return cmd
 }
 

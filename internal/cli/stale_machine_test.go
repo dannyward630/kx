@@ -177,18 +177,27 @@ func TestAStaleIndexLeavesADocumentOnStdoutAlone(t *testing.T) {
 	}
 }
 
-// A "--" ends the flags kx and kubectl read: an -o after it is the trailing
-// command's, not kx's. kx exec and kx debug, which are what put a command
-// there, no longer reach this — they carry documentAnnotation and are machine
-// output whatever their arguments say — so the rule is pinned on a
-// passthrough command that still reads its argv.
+// On a command that still splits its argv by hand, a "--" ends the flags kx
+// reads: what follows is the scanner's own trailing argv, and an -o there is
+// not an output format kx is asked for.
 func TestMachineOutputStopsAtTheCommandSeparator(t *testing.T) {
-	cmd := newCopyCommand(argvServices(t))
-	if machineOutput(cmd, []string{"1:/etc/hosts", "./hosts", "--", "-o", "json"}) {
+	cmd := newScanCommand(argvServices(t))
+	if machineOutput(cmd, []string{"1", "--", "-o", "json"}) {
 		t.Error("an -o past the separator read as kx's output format")
 	}
-	if !machineOutput(cmd, []string{"1:/etc/hosts", "./hosts", "-o", "json", "--", "x"}) {
+	if !machineOutput(cmd, []string{"1", "-o", "json", "--", "x"}) {
 		t.Error("an -o before the separator was not read")
+	}
+}
+
+// On a command that parses kubectl's flags, what follows "--" is kubectl's,
+// unread, so an -o there is an output format like any other.
+func TestMachineOutputReadsKubectlsArgvPastTheSeparator(t *testing.T) {
+	if !parsedMachineOutput(t, newCopyCommand(argvServices(t)), "1:/etc/hosts", "./hosts", "--", "-o", "json") {
+		t.Error("an -o kubectl will get, after --, was not read")
+	}
+	if parsedMachineOutput(t, newCopyCommand(argvServices(t)), "1:/etc/hosts", "./hosts", "-c", "app") {
+		t.Error("a copy with no output format was read as machine output")
 	}
 }
 
