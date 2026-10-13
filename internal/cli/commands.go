@@ -510,63 +510,49 @@ func newDeleteCommand(services Services) *cobra.Command {
 			"--dry-run=none as a dry run would skip the prompt on a real delete.",
 		Example: "  kx delete 3\n  kx delete 3 5 -y\n  kx delete 3..5\n  kx delete 3..\n" +
 			"  kx delete 3 --force --grace-period=0",
-		// No Args validator: cobra's arity check runs against the
-		// unstripped argv, which counts forwarded kubectl flags as
-		// positional arguments — and `--help` is a single argument that a
-		// gate would reject before passthrough could resolve it. The real
-		// arity check happens below.
-		Annotations:        mutatingAnnotations,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			yes, rest := extractBool(rest, "--yes", "-y")
-			// Only with --yes: without it, the confirm prompt already names
-			// the listing's provenance (listingProvenance), and printing the
-			// notice too would say the same thing twice — once as a question
-			// the user must answer, once as a statement they didn't ask for.
-			if yes {
-				installAgentIndexNotice(services)
-			}
-			indexArgs, extra := splitLeadingIndexes(rest)
-			if len(indexArgs) == 0 {
-				if len(rest) > 0 {
-					return fmt.Errorf(
-						"Invalid value for 'indexes': '%s' is not a valid int.", rest[0])
-				}
-				return requiredArgsError(cmd)
-			}
-			resolved, err := resolveRefs(services.State, "indexes", indexArgs)
+		Args:        minArgs(1),
+		Annotations: mutatingAnnotations,
+	}
+	cmd.Flags().BoolP("yes", "y", false, "Skip the confirmation prompt")
+	registerChangeFlags(cmd)
+	kubectlFlags := registerKubectlFlags(cmd, "delete")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		yes, _ := cmd.Flags().GetBool("yes")
+		// Only with --yes: without it, the confirm prompt already names
+		// the listing's provenance (listingProvenance), and printing the
+		// notice too would say the same thing twice — once as a question
+		// the user must answer, once as a statement they didn't ask for.
+		if yes {
+			installAgentIndexNotice(services)
+		}
+		indexArgs, extra, err := indexArgv(cmd, args, kubectlFlags)
+		if err != nil {
+			return err
+		}
+		resolved, err := resolveRefs(services.State, "indexes", indexArgs)
+		if err != nil {
+			return err
+		}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		command := DeleteCommand{
+			Kubectl: services.Kubectl,
+			State:   services.State,
+			Confirm: services.confirm(),
+			Status:  render.Status,
+		}
+		// Confirmed and reported one at a time, so declining one resource
+		// doesn't silently take the rest with it.
+		for _, target := range resolved {
+			message, output, err := command.Execute(target.Ref, yes, extra)
 			if err != nil {
 				return err
 			}
-			if err := refuseScopeFlagResolved(resolved, extra); err != nil {
-				return err
-			}
-			command := DeleteCommand{
-				Kubectl: services.Kubectl,
-				State:   services.State,
-				Confirm: services.confirm(),
-				Status:  render.Status,
-			}
-			// Confirmed and reported one at a time, so declining one resource
-			// doesn't silently take the rest with it.
-			for _, target := range resolved {
-				message, output, err := command.Execute(target.Ref, yes, extra)
-				if err != nil {
-					return err
-				}
-				reportChange(extra, output, message)
-			}
-			return nil
-		},
+			reportChange(extra, output, message)
+		}
+		return nil
 	}
-	// Parsed by hand, registered only so it appears in --help instead of
-	// vanishing.
-	cmd.Flags().BoolP("yes", "y", false, "Skip the confirmation prompt")
-	registerChangeFlags(cmd)
 	return cmd
 }
 

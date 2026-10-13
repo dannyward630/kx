@@ -225,3 +225,26 @@ func TestSharedFlagsKeepKxsType(t *testing.T) {
 		t.Errorf("--since type = %v, want kx's string", since)
 	}
 }
+
+// A command that registered kubectl's flags must let cobra parse them — with
+// DisableFlagParsing still set, the registered flags would never be set and
+// every one would reach RunE as a positional.
+func TestConvertedCommandsParseTheirFlags(t *testing.T) {
+	converted := 0
+	var walk func(cmd *cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		if recordedKubectlArgs(cmd) != nil {
+			converted++
+			if cmd.DisableFlagParsing {
+				t.Errorf("%s registers kubectl's flags but disables flag parsing", cmd.CommandPath())
+			}
+		}
+		for _, child := range cmd.Commands() {
+			walk(child)
+		}
+	}
+	walk(NewRoot(argvServices(t), "test"))
+	if converted == 0 {
+		t.Fatal("found no converted command; the walk checked nothing")
+	}
+}

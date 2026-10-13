@@ -601,7 +601,6 @@ func TestScaleRefusesAnExplicitReplicasFlag(t *testing.T) {
 // passthrough could resolve it.
 func TestNewlyForwardingCommandsHaveNoArgsValidator(t *testing.T) {
 	for name, cmd := range map[string]*cobra.Command{
-		"delete":   newDeleteCommand(Services{}),
 		"scale":    newScaleCommand(Services{}),
 		"rollout":  newRolloutCommand(Services{}),
 		"yaml":     newYamlCommand(Services{}),

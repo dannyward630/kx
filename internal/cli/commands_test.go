@@ -1468,3 +1468,72 @@ func TestDebugParsesKubectlFlagsUpToTheCommand(t *testing.T) {
 		}
 	}
 }
+
+// kx delete parses kubectl delete's flags. --dry-run is kx's to read as well
+// as kubectl's, and takes kubectl's shape: bare, it is a dry run on its own
+// and takes nothing after it — kx registers it as a string, which alone would
+// have swallowed the -y that follows as its value.
+func TestDeleteParsesKubectlFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"1", "--dry-run", "-y"}, "delete Pod nginx -n prod --dry-run"},
+		{[]string{"-y", "--dry-run=client", "2"}, "delete Pod redis -n prod --dry-run=client"},
+		{[]string{"--force", "--grace-period", "0", "1", "-y"}, "delete Pod nginx -n prod --force --grace-period=0"},
+	} {
+		kube, err := indexCommand(t, newDeleteCommand, tc.args...)
+		if err != nil {
+			t.Errorf("kx delete %s: %v", joinArgs(tc.args), err)
+			continue
+		}
+		calls := append(kube.runs, kube.interactive...)
+		if len(calls) != 1 || joinArgs(calls[0]) != tc.want {
+			t.Errorf("kx delete %s: kubectl = %q, want %q", joinArgs(tc.args), calls, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-n", "other", "1", "-y"}, "'--namespace' cannot be combined with an index"},
+		{[]string{"1", "--bogus", "-y"}, "'--bogus' isn't a flag of kubectl delete"},
+		{[]string{"-y"}, "requires <index>"},
+	} {
+		kube, err := indexCommand(t, newDeleteCommand, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx delete %s: err = %v, want %q", joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.runs)+len(kube.interactive) > 0 {
+			t.Errorf("kx delete %s: kubectl was called: %q %q", joinArgs(tc.args), kube.runs, kube.interactive)
+		}
+	}
+}
+
+// --yes is kx's, parsed by cobra wherever it sits: with it the prompt is never
+// asked; without it a declined prompt deletes nothing.
+func TestDeleteYesSkipsThePromptWhereverItSits(t *testing.T) {
+	for _, tc := range []struct {
+		args    []string
+		deletes bool
+	}{
+		{[]string{"-y", "1"}, true},
+		{[]string{"1", "--yes"}, true},
+		{[]string{"1"}, false},
+	} {
+		kube := &recordingKubectl{output: "ok"}
+		services := switchServices(t, kube)
+		asked := false
+		services.Confirm = func(string) error { asked = true; return errors.New("declined") }
+		if err := services.State.Save(state.State{
+			Resources: state.NewResources([]string{"nginx"}, kinds.Pod), Namespace: "prod",
+		}); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		quietRender(t)
+		_ = executeArgv(newDeleteCommand(services), tc.args)
+		if deleted := len(kube.runs) > 0; deleted != tc.deletes || asked == tc.deletes {
+			t.Errorf("kx delete %s: deleted=%v asked=%v, want deleted=%v", joinArgs(tc.args), deleted, asked, tc.deletes)
+		}
+	}
+}
