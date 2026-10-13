@@ -146,6 +146,11 @@ func registerKubectlFlags(cmd *cobra.Command, subcommands ...string) *kubectlArg
 	register := func(flag kubectlflags.Flag, where string) {
 		value := &kubectlValue{args: args, flag: flag}
 		if existing := flags.Lookup(flag.Name); existing != nil {
+			// kx's alone (ownFlag): kx builds it into the argv itself, so
+			// it is neither forwarded as given nor listed as kubectl's.
+			if len(existing.Annotations[kxOwnedAnnotation]) > 0 {
+				return
+			}
 			value.kxType = existing.Value.Type()
 			existing.Value = value
 			existing.NoOptDefVal = flag.NoOptDefVal
@@ -213,6 +218,22 @@ func recordedKubectlArgs(cmd *cobra.Command) *kubectlArgs {
 		return nil
 	}
 	return recorded.(*kubectlArgs)
+}
+
+// kxOwnedAnnotation marks a flag kx registered under one of kubectl's names
+// that kx reads and puts into kubectl's argv itself (see ownFlag).
+const kxOwnedAnnotation = "kx/owned"
+
+// ownFlag marks the flag name, already registered on cmd, as kx's alone though
+// kubectl defines one by that name: kx label reads --overwrite and adds it to
+// the argv it builds, so forwarding it as given as well would send it twice.
+// Called before registerKubectlFlags.
+func ownFlag(cmd *cobra.Command, name string) {
+	flag := cmd.Flags().Lookup(name)
+	if flag.Annotations == nil {
+		flag.Annotations = map[string][]string{}
+	}
+	flag.Annotations[kxOwnedAnnotation] = []string{"true"}
 }
 
 // isKubectlFlag reports whether flag was registered from kubectl's table
