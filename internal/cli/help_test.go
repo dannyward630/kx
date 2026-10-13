@@ -291,10 +291,10 @@ func TestRequiredArgsErrorNamesOnlyTheRequiredPrefix(t *testing.T) {
 	}
 }
 
-// minArgs and exactArgs must actually gate RunE, not just build a nicer
-// message nobody sees: a satisfied count returns nil, an unsatisfied one
-// returns the generated error.
-func TestMinArgsAndExactArgsGateOnCount(t *testing.T) {
+// minArgs must actually gate RunE, not just build a nicer message nobody
+// sees: a satisfied count returns nil, an unsatisfied one returns the
+// generated error.
+func TestMinArgsGatesOnCount(t *testing.T) {
 	cmd := &cobra.Command{Use: "describe <index>..."}
 	validate := minArgs(1)
 	if err := validate(cmd, []string{"1"}); err != nil {
@@ -302,17 +302,6 @@ func TestMinArgsAndExactArgsGateOnCount(t *testing.T) {
 	}
 	if err := validate(cmd, nil); err == nil {
 		t.Error("minArgs(1) with zero args returned nil, want an error")
-	}
-
-	scale := &cobra.Command{Use: "scale <index> <replicas>"}
-	exact := exactArgs(2)
-	if err := exact(scale, []string{"1", "3"}); err != nil {
-		t.Errorf("exactArgs(2) with two args: %v, want nil", err)
-	}
-	for _, args := range [][]string{nil, {"1"}, {"1", "3", "extra"}} {
-		if err := exact(scale, args); err == nil {
-			t.Errorf("exactArgs(2) with %v returned nil, want an error", args)
-		}
 	}
 }
 

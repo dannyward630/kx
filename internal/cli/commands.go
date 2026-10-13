@@ -177,17 +177,6 @@ func passthrough(cmd *cobra.Command, args []string, flags func([]string) ([]stri
 	return rest, false, nil
 }
 
-// splitAtDoubleDash separates kx's own arguments from a command to run inside a
-// container, which is what `kx exec 1 -- ls /app` needs.
-func splitAtDoubleDash(args []string) (before, after []string) {
-	for i, arg := range args {
-		if arg == "--" {
-			return args[:i], args[i+1:]
-		}
-	}
-	return args, nil
-}
-
 func newDescribeCommand(services Services) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:        "describe <index>... [kubectl flags]",

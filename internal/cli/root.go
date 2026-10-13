@@ -326,10 +326,3 @@ func registerWatchFlag(cmd *cobra.Command) {
 	cmd.Flags().BoolP("watch", "w", false,
 		"Redraw the listing live as resources change; a watch never completes, so results are not indexed")
 }
-
-func extractNamespaceFor(services Services, extraArgs []string) string {
-	if namespace := extractNamespace(extraArgs); namespace != "" {
-		return namespace
-	}
-	return services.Kubectl.CurrentNamespace()
-}

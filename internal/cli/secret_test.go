@@ -313,7 +313,7 @@ func TestIndexedDecodeRefusesMatch(t *testing.T) {
 	}
 }
 
-// oneResolved and twoResolved stand in for what runGet's resolveRefsExpecting
+// oneResolved and twoResolved stand in for what runGet's resolveParsedExpecting
 // call would have produced, for tests that exercise decodeSecrets directly
 // rather than through the whole runGet path. decodeSecrets trusts these —
 // the kind check now happens once, in the caller, before decodeSecrets is

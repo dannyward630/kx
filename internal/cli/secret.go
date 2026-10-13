@@ -169,7 +169,7 @@ func renderSecret(secret secretData, namespace string) {
 // listing them, so it never re-saves state.
 //
 // resolved has already been resolved — and, for a non-empty batch, kind
-// checked against kinds.Secret — by the caller's resolveRefsExpecting call
+// checked against kinds.Secret — by the caller's resolveParsedExpecting call
 // before decodeSecrets is ever reached, so every entry here is safe to fetch.
 // That is what keeps `kx get secrets --decode 1 99` from decoding and
 // printing index 1's plaintext before failing on the out-of-range 99: the

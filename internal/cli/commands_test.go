@@ -64,21 +64,6 @@ func TestSplitLeadingIndexes(t *testing.T) {
 	}
 }
 
-func TestSplitAtDoubleDash(t *testing.T) {
-	before, after := splitAtDoubleDash([]string{"1", "-c", "app", "--", "ls", "/x"})
-	if joinArgs(before) != "1 -c app" {
-		t.Errorf("before = %q", joinArgs(before))
-	}
-	if joinArgs(after) != "ls /x" {
-		t.Errorf("after = %q", joinArgs(after))
-	}
-
-	before, after = splitAtDoubleDash([]string{"1"})
-	if joinArgs(before) != "1" || after != nil {
-		t.Errorf("no separator: before = %q, after = %v", joinArgs(before), after)
-	}
-}
-
 func TestParseIndexNamesTheArgument(t *testing.T) {
 	_, err := parseIndex("indexes", "abc")
 	if err == nil {
