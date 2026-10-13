@@ -189,45 +189,45 @@ func splitAtDoubleDash(args []string) (before, after []string) {
 }
 
 func newDescribeCommand(services Services) *cobra.Command {
-	return &cobra.Command{
-		Use:                "describe <index>... [kubectl flags]",
-		SuggestFor:         []string{"detail", "details"},
-		Short:              "Show full kubectl describe output for one or more indexed resources.",
-		Long:               "Shows full kubectl describe output for one or more indexed resources, printing each under its own Kind/name banner.",
-		Example:            "  kx describe 1\n  kx describe 1 3 5\n  kx describe 1..3\n  kx describe 3..\n  kx describe @api",
-		Args:               minArgs(1),
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rest, handled, err := passthrough(cmd, args, nil)
-			if err != nil || handled {
-				return err
-			}
-			// The leading run of numbers are the indexes; the rest belongs to
-			// kubectl. The first argument is always an index, so a
-			// non-numeric one is reported rather than quietly forwarded —
-			// otherwise `kx describe abc` would describe nothing and succeed.
-			indexArgs, extra := splitLeadingIndexes(rest)
-			if len(indexArgs) == 0 {
-				if len(rest) > 0 {
-					return fmt.Errorf(
-						"Invalid value for 'indexes': '%s' is not a valid int.", rest[0])
-				}
-				return requiredArgsError(cmd)
-			}
-			resolved, err := resolveRefs(services.State, "indexes", indexArgs)
-			if err != nil {
-				return err
-			}
-			if err := refuseScopeFlagResolved(resolved, extra); err != nil {
-				return err
-			}
-			command := DescribeCommand{Kubectl: services.Kubectl, State: services.State}
-			return runEach(resolved, func(target Resolved) error {
-				banner(cmd, target, "")
-				return command.Execute(target.Ref, extra)
-			})
-		},
+	cmd := &cobra.Command{
+		Use:        "describe <index>... [kubectl flags]",
+		SuggestFor: []string{"detail", "details"},
+		Short:      "Show full kubectl describe output for one or more indexed resources.",
+		Long:       "Shows full kubectl describe output for one or more indexed resources, printing each under its own Kind/name banner.",
+		Example:    "  kx describe 1\n  kx describe 1 3 5\n  kx describe 1..3\n  kx describe 3..\n  kx describe @api",
+		Args:       minArgs(1),
 	}
+	kubectlFlags := registerKubectlFlags(cmd, "describe")
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		positional, forward := kubectlArgv(cmd, args, kubectlFlags)
+		// The leading run of numbers are the indexes. The first argument is
+		// always an index, so a non-numeric one is reported rather than
+		// quietly forwarded — otherwise `kx describe abc` would describe
+		// nothing and succeed. Any argument after the indexes is kubectl's,
+		// ahead of its flags, as it was before kx parsed them.
+		indexArgs, stray := splitLeadingIndexes(positional)
+		if len(indexArgs) == 0 {
+			if len(positional) > 0 {
+				return fmt.Errorf(
+					"Invalid value for 'indexes': '%s' is not a valid int.", positional[0])
+			}
+			return requiredArgsError(cmd)
+		}
+		extra := append(stray[:len(stray):len(stray)], forward...)
+		resolved, err := resolveRefs(services.State, "indexes", indexArgs)
+		if err != nil {
+			return err
+		}
+		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
+			return err
+		}
+		command := DescribeCommand{Kubectl: services.Kubectl, State: services.State}
+		return runEach(resolved, func(target Resolved) error {
+			banner(cmd, target, "")
+			return command.Execute(target.Ref, extra)
+		})
+	}
+	return cmd
 }
 
 // splitLeadingIndexes takes the run of numeric-, range- or mark-shaped

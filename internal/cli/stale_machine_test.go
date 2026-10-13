@@ -197,7 +197,7 @@ func TestMachineOutputStopsAtTheCommandSeparator(t *testing.T) {
 // table for a person, which a stale index refreshes.
 func TestMachineOutputReadsKeyOnlyBesideDecode(t *testing.T) {
 	services := argvServices(t)
-	if machineOutput(newDescribeCommand(services), []string{"1", "-k", "overlays/prod", "-o", "wide"}) {
+	if parsedMachineOutput(t, newDescribeCommand(services), "1", "-k", "overlays/prod") {
 		t.Error("kubectl's -k read as --decode's key")
 	}
 	if !parsedMachineOutput(t, newSecretCommand(services, "secret", nil), "1", "--decode", "-k", "token") {
