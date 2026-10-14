@@ -198,11 +198,14 @@ func newDrainCommand(services Services) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if err := refuseStray(cmd, kubectlFlags, positional[1:]); err != nil {
+			return err
+		}
 		_, namespace, kind, err := services.State.Resolve(ref)
 		if err != nil {
 			return err
 		}
-		extra := append(positional[1:len(positional):len(positional)], forward...)
+		extra := forward
 		resolved := []Resolved{{Ref: ref, Namespace: namespace, Kind: kind}}
 		if err := refuseScopeFlagResolved(resolved, extra); err != nil {
 			return err

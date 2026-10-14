@@ -1501,6 +1501,49 @@ func TestDeleteParsesKubectlFlags(t *testing.T) {
 	}
 }
 
+// A positional left after a mutating command's arguments is refused, not
+// forwarded: kubectl read it as one more resource, so kx delete 1 web -y
+// deleted web as well as the nginx it reported (#507). --cascade orphan, bare,
+// left orphan behind that way, and the refusal says how to attach it.
+func TestMutatingCommandsRefuseAStrayPositional(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		kind  kinds.Kind
+		build func(Services) *cobra.Command
+		args  []string
+		want  string
+	}{
+		{"delete", kinds.Pod, newDeleteCommand, []string{"1", "web", "-y"}, "'web' isn't an argument of delete"},
+		{"delete", kinds.Pod, newDeleteCommand, []string{"1", "2", "web", "-y"}, "'web' isn't an argument of delete"},
+		{"delete", kinds.Pod, newDeleteCommand, []string{"1", "--cascade", "orphan", "-y"},
+			"attach it: '--cascade=orphan'"},
+		{"scale", kinds.Deployment, newScaleCommand, []string{"1", "3", "web"}, "'web' isn't an argument of scale"},
+		{"drain", kinds.Node, newDrainCommand, []string{"1", "node-b", "-y"}, "'node-b' isn't an argument of drain"},
+		{"rollout", kinds.Deployment, newRolloutCommand, []string{"restart", "1", "web"},
+			"'web' isn't an argument of rollout"},
+	} {
+		kube, err := indexCommandOn(t, tc.kind, tc.build, tc.args...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("kx %s %s: err = %v, want %q", tc.name, joinArgs(tc.args), err, tc.want)
+		}
+		if len(kube.runs)+len(kube.interactive) > 0 {
+			t.Errorf("kx %s %s: kubectl was called: %q %q", tc.name, joinArgs(tc.args), kube.runs, kube.interactive)
+		}
+	}
+}
+
+// After -- a word is still kubectl's, forwarded unread: the refusal covers the
+// positionals kx parsed, not the escape that exists to get past kx's parse.
+func TestDeleteForwardsAfterDashUnread(t *testing.T) {
+	kube, err := indexCommand(t, newDeleteCommand, "1", "-y", "--", "--raw-flag")
+	if err != nil {
+		t.Fatalf("kx delete 1 -y -- --raw-flag: %v", err)
+	}
+	if len(kube.runs) != 1 || joinArgs(kube.runs[0]) != "delete Pod nginx -n prod --raw-flag" {
+		t.Errorf("kubectl = %q, want delete Pod nginx -n prod --raw-flag", kube.runs)
+	}
+}
+
 // --yes is kx's, parsed by cobra wherever it sits: with it the prompt is never
 // asked; without it a declined prompt deletes nothing.
 func TestDeleteYesSkipsThePromptWhereverItSits(t *testing.T) {
