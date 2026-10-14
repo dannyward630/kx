@@ -43,7 +43,7 @@ kx drain [OPTIONS] <index> [kubectl flags]
 |---|---|
 | `--chunk-size int64` | Return large lists in chunks rather than all at once. Pass 0 to disable. |
 | `--disable-eviction` | Force drain to use delete, even if eviction is supported. This will bypass checking PodDisruptionBudgets, use with caution. |
-| `--dry-run string` | Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. |
+| `--dry-run[=string]` | Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. |
 | `--pod-selector string` | Label selector to filter pods on the node |
 | `-l, --selector string` | Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints. |
 | `--skip-wait-for-delete-timeout int` | If pod DeletionTimestamp older than N seconds, skip waiting for the pod. Seconds must be greater than 0 to skip. |

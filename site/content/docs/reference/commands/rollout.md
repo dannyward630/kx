@@ -30,7 +30,7 @@ kx rollout [OPTIONS] <action> <index> [kubectl flags]
 | Option | Description |
 |---|---|
 | `--allow-missing-template-keys` | If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. |
-| `--dry-run string` | Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. |
+| `--dry-run[=string]` | Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. |
 | `--field-manager string` | Name of the manager used to track field ownership. |
 | `-f, --filename strings` | Filename, directory, or URL to files identifying the resource to get from a server. |
 | `-k, --kustomize string` | Process the kustomization directory. This flag can't be used together with -f or -R. |

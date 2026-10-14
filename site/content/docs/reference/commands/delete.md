@@ -28,7 +28,7 @@ kx delete [OPTIONS] <index>... [kubectl flags]
 
 | Option | Description |
 |---|---|
-| `--dry-run string` | client or server to preview the change without making it, as kubectl takes it; kx's line says nothing was changed |
+| `--dry-run[=string]` | client or server to preview the change without making it, as kubectl takes it; kx's line says nothing was changed |
 | `-o, --output string` | Output format, as kubectl takes it; kubectl's output is printed, and kx's own lines go to stderr |
 | `-y, --yes` | Skip the confirmation prompt |
 
@@ -38,7 +38,7 @@ kx delete [OPTIONS] <index>... [kubectl flags]
 |---|---|
 | `--all` | Delete all resources, in the namespace of the specified resource types. |
 | `-A, --all-namespaces` | If present, list the requested object(s) across all namespaces. Namespace in current context is ignored even if specified with --namespace. |
-| `--cascade string` | Must be "background", "orphan", or "foreground". Selects the deletion cascading strategy for the dependents (e.g. Pods created by a ReplicationController). Defaults to background. |
+| `--cascade[=string]` | Must be "background", "orphan", or "foreground". Selects the deletion cascading strategy for the dependents (e.g. Pods created by a ReplicationController). Defaults to background. |
 | `--field-selector string` | Selector (field query) to filter on, supports '=', '==', and '!='.(e.g. --field-selector key1=value1,key2=value2). The server only supports a limited number of field queries per type. |
 | `-f, --filename strings` | containing the resource to delete. |
 | `--force` | If true, immediately remove resources from API and bypass graceful deletion. Note that immediate deletion of some resources may result in inconsistency or data loss and requires confirmation. |
