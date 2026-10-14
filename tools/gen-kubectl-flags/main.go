@@ -196,6 +196,12 @@ func writeFlags(b *bytes.Buffer, flags *pflag.FlagSet) {
 		if f.Deprecated != "" {
 			fmt.Fprintf(b, ", Deprecated: %q", f.Deprecated)
 		}
+		if exts, ok := f.Annotations[cobra.BashCompFilenameExt]; ok {
+			b.WriteString(", Filename: true")
+			if len(exts) > 0 {
+				fmt.Fprintf(b, ", Extensions: %#v", exts)
+			}
+		}
 		b.WriteString("},\n")
 	})
 }
