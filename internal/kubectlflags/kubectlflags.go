@@ -34,6 +34,12 @@ type Flag struct {
 	// Deprecated is kubectl's deprecation message, empty when the flag is not.
 	// A deprecated flag still works.
 	Deprecated string
+	// Filename is set on a flag kubectl marks as taking a file (-f, --template),
+	// the one kind of value shell completion should offer files for.
+	Filename bool
+	// Extensions narrows a Filename flag's files to these extensions, empty
+	// for any file.
+	Extensions []string
 }
 
 // TakesValue reports whether the flag consumes the next argument when written

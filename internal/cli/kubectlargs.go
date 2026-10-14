@@ -166,6 +166,11 @@ func registerKubectlFlags(cmd *cobra.Command, subcommands ...string) *kubectlArg
 		registered.Deprecated = flag.Deprecated
 		registered.Hidden = flag.Hidden
 		registered.Annotations = map[string][]string{kubectlFlagAnnotation: {where}}
+		// kubectl's mark for a flag that takes a file, which cobra's
+		// completion reads to offer files, narrowed to the extensions.
+		if flag.Filename {
+			registered.Annotations[cobra.BashCompFilenameExt] = flag.Extensions
+		}
 	}
 	for _, subcommand := range subcommands {
 		own, ok := kubectlflags.Command(subcommand)
