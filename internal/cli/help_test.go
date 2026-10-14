@@ -920,6 +920,9 @@ func TestOptionsShowShorthandFirstAndValueType(t *testing.T) {
 		{"diagnostic", "port", "--port int"},
 		{"diagnostic", "all-namespaces", "-A, --all-namespaces"},
 		{"label", "remove", "--remove strings"},
+		// An optional value is attached or absent, never the next word.
+		{"delete", "cascade", "--cascade[=string]"},
+		{"delete", "dry-run", "--dry-run[=string]"},
 	}
 	for _, tc := range cases {
 		cmd, _, err := root.Find([]string{tc.command})

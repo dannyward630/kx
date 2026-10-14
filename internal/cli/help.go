@@ -148,12 +148,19 @@ func flagNames(flag *pflag.Flag) string {
 
 // flagSpelling is flagNames plus the kind of value the flag takes, so a reader
 // can tell `--port` wants a number from `--full`, which wants nothing.
+//
+// A flag whose value is optional — kubectl's --cascade, --dry-run — takes it
+// only attached, as --cascade=orphan: the next word is never its value. Help
+// spelled it "--cascade string", and `kx delete 1 --cascade 2` read as it
+// suggested deleted row 2 as well, under a bare --cascade.
 func flagSpelling(flag *pflag.Flag) string {
 	name := flagNames(flag)
-	switch flag.Value.Type() {
-	case "bool":
+	switch kind := flag.Value.Type(); {
+	case kind == "bool":
 		return name
-	case "stringArray", "stringSlice":
+	case flag.NoOptDefVal != "":
+		return name + "[=" + kind + "]"
+	case kind == "stringArray", kind == "stringSlice":
 		return name + " strings"
 	default:
 		return name + " " + flag.Value.Type()

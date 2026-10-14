@@ -29,20 +29,24 @@ func ArgToken(arg cli.Arg) string {
 }
 
 // FlagToken renders a flag as [--long/-short type], dropping the type for
-// booleans since a switch takes no value.
+// booleans since a switch takes no value. An optional value is shown attached,
+// [--dry-run[=str]], since that is the only way it is taken.
 func FlagToken(flag *pflag.Flag) string {
 	names := "--" + flag.Name
 	if flag.Shorthand != "" {
 		names += "/-" + flag.Shorthand
 	}
-	switch flag.Value.Type() {
+	kind := flag.Value.Type()
+	switch kind {
 	case "bool":
 		return "[" + names + "]"
 	case "string", "stringArray", "stringSlice":
-		return "[" + names + " str]"
-	default:
-		return "[" + names + " " + flag.Value.Type() + "]"
+		kind = "str"
 	}
+	if flag.NoOptDefVal != "" {
+		return "[" + names + "[=" + kind + "]]"
+	}
+	return "[" + names + " " + kind + "]"
 }
 
 // Signature is the whole invocation: the command, its positional arguments, its
