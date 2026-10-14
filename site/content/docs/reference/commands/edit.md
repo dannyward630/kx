@@ -8,7 +8,7 @@ weight: 11
 
 Opens an indexed resource in your editor via kubectl edit — one resource at a time, since only one editor session can be open.
 
-A flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread.
+A flag kx doesn't know is refused; put it after `--` to pass it through to kubectl.
 
 ## Usage
 

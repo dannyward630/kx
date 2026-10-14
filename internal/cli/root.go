@@ -253,7 +253,10 @@ func newGetCommand(services Services) *cobra.Command {
 		}
 		// Positionals first, then kubectl's flags: the indexes follow the
 		// resource, and runGet reads them as the leading run of what is left.
-		rest := append(positional[1:len(positional):len(positional)], forward...)
+		// What followed `--` is handed over apart, so none of it is an index.
+		options.AfterDash = afterDash(cmd, args)
+		flags := forward[:len(forward)-len(options.AfterDash)]
+		rest := append(positional[1:len(positional):len(positional)], flags...)
 		// A number here is a row, not a kind — the indexes follow the
 		// resource, they do not replace it.
 		if _, err := strconv.Atoi(positional[0]); err == nil {

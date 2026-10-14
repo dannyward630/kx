@@ -75,7 +75,7 @@ func TestGetForwardsKubectlFlagsInOrder(t *testing.T) {
 }
 
 // A flag newer than kx's table is refused, naming the table's kubectl, and
-// nothing runs. Anything after -- is kubectl's, unread, which is the way to
+// nothing runs. Anything after -- is kubectl's, unparsed, which is the way to
 // pass it anyway.
 func TestGetRefusesAnUnknownFlagAndForwardsAfterDoubleDash(t *testing.T) {
 	kube, _, err := runGetArgv(t, "pods", "--some-new-flag")
@@ -97,6 +97,33 @@ func TestGetRefusesAnUnknownFlagAndForwardsAfterDoubleDash(t *testing.T) {
 	}
 	if len(kube.runs) != 1 || joinArgs(kube.runs[0]) != "get pods --namespace=prod --some-new-flag x" {
 		t.Errorf("kubectl = %q, want the arguments after -- forwarded as given", kube.runs)
+	}
+}
+
+// What follows -- is kubectl's, never an index. kx get pods -- 2 fetched row 2
+// by name, while kx get pods -o wide -- 2 forwarded the 2: whether it was an
+// index turned on a flag that had nothing to do with it.
+func TestGetReadsNoIndexAfterDoubleDash(t *testing.T) {
+	for _, tc := range []struct {
+		command func(Services) *cobra.Command
+		args    []string
+		want    string
+	}{
+		{newGetCommand, []string{"pods", "--", "2"}, "get pods 2"},
+		{newGetCommand, []string{"pods", "-o", "wide", "--", "2"}, "get pods --output=wide 2"},
+		{func(s Services) *cobra.Command { return newSecretCommand(s, "secret", nil) },
+			[]string{"--", "2"}, "get secret 2"},
+	} {
+		kube := &recordingKubectl{output: podsOutput}
+		cmd := tc.command(staleServices(t, kube, &state.Query{Resource: "pods", Args: []string{}}))
+		cmd.SilenceUsage, cmd.SilenceErrors = true, true
+		if _, _, err := runCaptured(t, cmd, tc.args); err != nil {
+			t.Errorf("kx %s %s: %v", cmd.Name(), joinArgs(tc.args), err)
+			continue
+		}
+		if len(kube.runs) != 1 || joinArgs(kube.runs[0]) != tc.want {
+			t.Errorf("kx %s %s: kubectl = %q, want %q", cmd.Name(), joinArgs(tc.args), kube.runs, tc.want)
+		}
 	}
 }
 

@@ -14,7 +14,7 @@ A cluster-scoped kind — Nodes, PersistentVolumes, StorageClasses, a cluster-sc
 
 A `--match` term narrows the table, a watch's live table or `-o name` by each row's name. JSON, YAML and templates have no rows for it to pick, so kx refuses it beside them rather than printing everything.
 
-A flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread.
+A flag kx doesn't know is refused; put it after `--` to pass it through to kubectl.
 
 ## Usage
 

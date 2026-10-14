@@ -12,7 +12,7 @@ One index only, unlike kx cordon: a drain evicts running workloads and blocks un
 
 kubectl's own drain flags pass through — a drain usually needs --ignore-daemonsets, and often --delete-emptydir-data.
 
-A flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread.
+A flag kx doesn't know is refused; put it after `--` to pass it through to kubectl.
 
 ## Usage
 

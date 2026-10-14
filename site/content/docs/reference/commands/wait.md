@@ -14,7 +14,7 @@ A Deployment, StatefulSet or DaemonSet is waited for with kx rollout status, whi
 
 Several indexes are all resolved and checked before anything waits, then waited for in order; the first that fails or times out ends the command. --timeout covers them together, as it does for kubectl: each waits for what the ones before it left, not a timeout of its own.
 
-A flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread.
+A flag kx doesn't know is refused; put it after `--` to pass it through to kubectl.
 
 ## Usage
 
