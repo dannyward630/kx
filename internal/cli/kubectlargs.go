@@ -264,8 +264,9 @@ func wordSepNormalize(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 //
 // An unknown flag: the flag table is read from one kubectl release, so a flag
 // newer than it is unknown here though the kubectl on PATH would take it.
-// Anything after `--` reaches kubectl unread, which is the way through; kx
-// --version names both kubectls when the difference needs explaining.
+// Anything after `--` reaches kubectl without being checked against the table,
+// which is the way through; kx --version names both kubectls when the
+// difference needs explaining.
 //
 // A malformed value for one of kx's own typed flags (kx top's --port): the
 // same sentence kx uses for a malformed index. kubectl's flags never raise it,
@@ -343,7 +344,7 @@ func requiredUse(cmd *cobra.Command) string {
 }
 
 // kubectlArgv splits what cobra parsed into the positional arguments and the
-// argv for kubectl: the recorded flags, then anything after `--`, unread. On a
+// argv for kubectl: the recorded flags, then anything after `--`, unparsed. On a
 // command that runs a command of its own after `--` (see trailingCommand),
 // that is the command, not kubectl's, and is left for afterDash.
 func kubectlArgv(cmd *cobra.Command, args []string, recorded *kubectlArgs) (positional, forward []string) {

@@ -19,6 +19,9 @@ type getOptions struct {
 	Key    string
 	HasKey bool
 	Yes    bool
+	// AfterDash is what followed `--`: kubectl's, forwarded after its other
+	// flags, and never an index, however much it looks like one.
+	AfterDash []string
 }
 
 // namespaceGroup is a run of resolved names sharing a namespace, in the order
@@ -124,6 +127,7 @@ func runGet(services Services, resource string, args []string, options getOption
 	// and a scan-anywhere loop that expanded it as a range broke that
 	// passthrough outright instead of erroring or ignoring it.
 	indexArgs, extra := splitLeadingIndexes(args)
+	extra = append(extra[:len(extra):len(extra)], options.AfterDash...)
 	var refs []state.Ref
 	if len(indexArgs) > 0 {
 		var err error

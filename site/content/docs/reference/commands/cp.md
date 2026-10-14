@@ -8,7 +8,7 @@ weight: 5
 
 Copies files to or from an indexed pod via kubectl cp. Either side of the copy can name a path inside the pod as index:path.
 
-A flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread.
+A flag kx doesn't know is refused; put it after `--` to pass it through to kubectl.
 
 ## Usage
 

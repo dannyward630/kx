@@ -8,7 +8,7 @@ weight: 8
 
 Shows full kubectl describe output for one or more indexed resources, printing each under its own Kind/name banner.
 
-A flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread.
+A flag kx doesn't know is refused; put it after `--` to pass it through to kubectl.
 
 ## Usage
 

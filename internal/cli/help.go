@@ -259,7 +259,7 @@ func commandHelp(cmd *cobra.Command) render.CommandHelp {
 	case cmd.Annotations[kubectlCommandAnnotation] != "":
 		// Not passed through: kx knows kubectl's flags here, lists them below,
 		// and refuses one it does not know rather than guessing at its shape.
-		doc += "\n\nA flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread."
+		doc += "\n\nA flag kx doesn't know is refused; put it after `--` to pass it through to kubectl."
 	case spec.Passthrough != "" && !passthroughMention.MatchString(doc):
 		doc += "\n\nUnrecognized flags are passed through to " + passthroughTarget(spec.Passthrough) + "."
 	}

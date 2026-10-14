@@ -327,8 +327,11 @@ func newSecretCommand(services Services, use string, aliases []string) *cobra.Co
 		if err != nil {
 			return err
 		}
-		// The indexes lead, as runGet reads them, then kubectl's flags.
-		rest := append(positional[:len(positional):len(positional)], forward...)
+		// The indexes lead, as runGet reads them, then kubectl's flags; what
+		// followed `--` is handed over apart, so none of it is an index.
+		options.AfterDash = afterDash(cmd, args)
+		flags := forward[:len(forward)-len(options.AfterDash)]
+		rest := append(positional[:len(positional):len(positional)], flags...)
 		return runGet(services, "secret", rest, options)
 	}
 	return cmd

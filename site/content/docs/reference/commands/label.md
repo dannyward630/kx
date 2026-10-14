@@ -8,7 +8,7 @@ weight: 15
 
 Sets or removes labels on one indexed resource — key=value to set, --remove to drop a key.
 
-A flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread.
+A flag kx doesn't know is refused; put it after `--` to pass it through to kubectl.
 
 ## Usage
 

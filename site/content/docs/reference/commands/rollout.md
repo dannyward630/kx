@@ -10,7 +10,7 @@ Runs a rollout action on a Deployment, StatefulSet, or DaemonSet. status streams
 
 kubectl's own flags pass through, which is how undo reaches a particular revision: --to-revision, --revision for history, --timeout for status.
 
-A flag kx doesn't know is refused; put it after `--` to pass it to kubectl unread.
+A flag kx doesn't know is refused; put it after `--` to pass it through to kubectl.
 
 ## Usage
 
