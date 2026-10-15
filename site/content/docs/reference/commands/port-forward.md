@@ -23,7 +23,7 @@ kx port-forward [OPTIONS] <index> <port> [kubectl flags]
 | `<index>` | Row number from the current listing, or @name for a mark; kx state or kx mark shows them |
 | `<port>` | Port mapping, local:remote — e.g. 8080:80, or :80 to pick a local port |
 
-## kubectl options
+## Options for kubectl
 
 | Option | Description |
 |---|---|
