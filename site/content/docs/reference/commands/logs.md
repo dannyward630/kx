@@ -65,6 +65,7 @@ kx logs 1
 kx logs 1 2
 kx logs 1 -f --tail=100
 kx logs 1 --since 7d
+kx logs 1 --previous
 kx logs 1..3
 kx logs 3..
 kx logs @api -f

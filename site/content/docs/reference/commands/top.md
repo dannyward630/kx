@@ -68,4 +68,5 @@ kx top --no-limits
 kx top --html
 kx top --json
 kx top --out top.html
+kx top --sort-by=memory
 ```

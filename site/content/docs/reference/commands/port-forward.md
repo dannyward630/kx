@@ -42,4 +42,5 @@ kx port-forward [OPTIONS] <index> <port> [kubectl flags]
 
 ```bash
 kx port-forward 1 8080:80
+kx port-forward 1 8080:80 --address=0.0.0.0
 ```

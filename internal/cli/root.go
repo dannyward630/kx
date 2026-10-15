@@ -237,7 +237,7 @@ func newGetCommand(services Services) *cobra.Command {
 			"A `--match` term narrows the table, a watch's live table or `-o name` by " +
 			"each row's name. JSON, YAML and templates have no rows for it to pick, so " +
 			"kx refuses it beside them rather than printing everything.",
-		Example: "  kx get pods\n  kx get pods -n prod -l app=web\n  kx get deploy -m api\n  kx get pods 1..3\n  kx get pods 3..\n  kx get pods --watch",
+		Example: "  kx get pods\n  kx get pods -n prod -l app=web\n  kx get deploy -m api\n  kx get pods 1..3\n  kx get pods 3..\n  kx get pods --watch\n  kx get pods --sort-by=.metadata.creationTimestamp",
 		Args:    minArgs(1),
 	}
 	kubectlFlags := registerGetFlags(cmd)

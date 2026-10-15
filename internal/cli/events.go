@@ -138,7 +138,7 @@ func newTopCommand(services Services) *cobra.Command {
 		Short:      "List CPU/memory usage for pods (default) or nodes and assign index numbers, like kx get; shows usage as a percent of limits (pods) or capacity (nodes) unless --no-limits.",
 		Long:       "Lists pod or node CPU and memory usage with kubectl top, assigns indexes, and shows CPU%/MEM% — computed against each pod's limits for pods, native to kubectl for nodes.",
 		Example: "  kx top\n  kx top nodes\n  kx top -m web\n  kx top --no-limits\n" +
-			"  kx top --html\n  kx top --json\n  kx top --out top.html",
+			"  kx top --html\n  kx top --json\n  kx top --out top.html\n  kx top --sort-by=memory",
 		// `resource` means something narrower here than it does to kx get.
 		Annotations: map[string]string{"arg.resource": "pods (the default) or nodes"},
 	}

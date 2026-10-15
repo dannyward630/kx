@@ -52,4 +52,5 @@ kx edit [OPTIONS] <index> [kubectl flags]
 
 ```bash
 kx edit 2
+kx edit 2 -o json
 ```

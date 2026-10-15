@@ -50,4 +50,5 @@ kx describe 1 3 5
 kx describe 1..3
 kx describe 3..
 kx describe @api
+kx describe 1 --show-events=false
 ```
