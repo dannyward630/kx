@@ -84,4 +84,5 @@ kx get deploy -m api
 kx get pods 1..3
 kx get pods 3..
 kx get pods --watch
+kx get pods --sort-by=.metadata.creationTimestamp
 ```

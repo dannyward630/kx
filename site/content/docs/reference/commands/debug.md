@@ -78,4 +78,5 @@ kx debug 1
 kx debug 1 --image alpine
 kx debug 1 -- ls /proc/1/root
 kx debug 1 -- ls /host/var/log
+kx debug 1 --profile=sysadmin
 ```

@@ -80,4 +80,5 @@ kx secret 1 --decode
 kx secret 1 --decode -k tls.crt
 kx secret 1..3
 kx secret 3..
+kx secret -l app=web
 ```

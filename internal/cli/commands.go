@@ -183,7 +183,7 @@ func newDescribeCommand(services Services) *cobra.Command {
 		SuggestFor: []string{"detail", "details"},
 		Short:      "Show full kubectl describe output for one or more indexed resources.",
 		Long:       "Shows full kubectl describe output for one or more indexed resources, printing each under its own Kind/name banner.",
-		Example:    "  kx describe 1\n  kx describe 1 3 5\n  kx describe 1..3\n  kx describe 3..\n  kx describe @api",
+		Example:    "  kx describe 1\n  kx describe 1 3 5\n  kx describe 1..3\n  kx describe 3..\n  kx describe @api\n  kx describe 1 --show-events=false",
 		Args:       minArgs(1),
 	}
 	kubectlFlags := registerKubectlFlags(cmd, "describe")
@@ -247,7 +247,7 @@ func newLogsCommand(services Services) *cobra.Command {
 		Short:      "Stream logs for an indexed resource; aggregates across pods for Deployments, StatefulSets, DaemonSets, Jobs, and Services.",
 		Long: "Streams logs for an indexed resource. Deployments, StatefulSets, DaemonSets, Jobs and Services aggregate logs across the pods they own.\n\n" +
 			"kubectl's own flags pass through. --since is the exception: it is read here first, so it takes the day spelling kx uses everywhere else (7d) as well as the ones kubectl understands.",
-		Example:     "  kx logs 1\n  kx logs 1 2\n  kx logs 1 -f --tail=100\n  kx logs 1 --since 7d\n  kx logs 1..3\n  kx logs 3..\n  kx logs @api -f",
+		Example:     "  kx logs 1\n  kx logs 1 2\n  kx logs 1 -f --tail=100\n  kx logs 1 --since 7d\n  kx logs 1 --previous\n  kx logs 1..3\n  kx logs 3..\n  kx logs @api -f",
 		Args:        minArgs(1),
 		Annotations: documentAnnotations,
 	}
@@ -351,7 +351,7 @@ func newEditCommand(services Services) *cobra.Command {
 		Use:         "edit <index> [kubectl flags]",
 		Short:       "Open an indexed resource in your editor via kubectl edit.",
 		Long:        "Opens an indexed resource in your editor via kubectl edit — one resource at a time, since only one editor session can be open.",
-		Example:     "  kx edit 2",
+		Example:     "  kx edit 2\n  kx edit 2 -o json",
 		Args:        minArgs(1),
 		Annotations: mutatingAnnotations,
 	}
@@ -445,7 +445,7 @@ func newDebugCommand(services Services) *cobra.Command {
 			"shell — kubectl names it on exit, and it is yours to delete. --target does not " +
 			"apply, since there is no container to share a namespace with.",
 		Example: "  kx debug 1\n  kx debug 1 --image alpine\n" +
-			"  kx debug 1 -- ls /proc/1/root\n  kx debug 1 -- ls /host/var/log",
+			"  kx debug 1 -- ls /proc/1/root\n  kx debug 1 -- ls /host/var/log\n  kx debug 1 --profile=sysadmin",
 		Args:        minArgs(1),
 		Annotations: mutatingDocumentAnnotations,
 	}
@@ -691,7 +691,7 @@ func newPortForwardCommand(services Services) *cobra.Command {
 		Short:      "Forward a local port to an indexed resource (Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet, Service).",
 		Long: "Forwards a local port to an indexed resource. Given a workload rather than a Pod, " +
 			"kubectl picks which of its pods to forward to — the same choice kx exec leaves to kubectl.",
-		Example: "  kx port-forward 1 8080:80",
+		Example: "  kx port-forward 1 8080:80\n  kx port-forward 1 8080:80 --address=0.0.0.0",
 		Args:    minArgs(2),
 	}
 	kubectlFlags := registerKubectlFlags(cmd, "port-forward")
