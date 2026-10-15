@@ -25,7 +25,7 @@ kx rollout [OPTIONS] <action> <index> [kubectl flags]
 | `<action>` | status, restart, pause, resume, history, or undo |
 | `<index>` | Row number from the current listing, or @name for a mark; kx state or kx mark shows them |
 
-## Options for kubectl
+## Passthrough
 
 | Option | Description |
 |---|---|

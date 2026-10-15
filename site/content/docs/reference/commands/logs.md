@@ -30,7 +30,7 @@ kx logs [OPTIONS] <index>... [kubectl flags]
 |---|---|
 | `--since string` | Only logs newer than this; s, m, h or d: 90s, 30m, 12h, 7d |
 
-## Options for kubectl
+## Passthrough
 
 | Option | Description |
 |---|---|

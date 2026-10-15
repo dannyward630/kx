@@ -32,7 +32,7 @@ kx scale [OPTIONS] <index> <replicas> [kubectl flags]
 | `--dry-run[=string]` | client or server to preview the change without making it, as kubectl takes it; kx's line says nothing was changed |
 | `-o, --output string` | Output format, as kubectl takes it; kubectl's output is printed, and kx's own lines go to stderr |
 
-## Options for kubectl
+## Passthrough
 
 | Option | Description |
 |---|---|

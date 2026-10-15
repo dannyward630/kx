@@ -25,7 +25,7 @@ kx exec [OPTIONS] <index> [kubectl flags] [-- command...]
 | `<index>` | Row number from the current listing, or @name for a mark; kx state or kx mark shows them |
 | `[command]...` | Command to run in the pod instead of a shell |
 
-## Options for kubectl
+## Passthrough
 
 | Option | Description |
 |---|---|

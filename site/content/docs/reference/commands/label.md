@@ -32,7 +32,7 @@ kx label [OPTIONS] <index> [key=value...] [kubectl flags]
 | `--overwrite` | Allow replacing an existing key |
 | `--remove strings` | Key to remove (repeatable) |
 
-## Options for kubectl
+## Passthrough
 
 | Option | Description |
 |---|---|

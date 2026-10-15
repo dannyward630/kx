@@ -36,7 +36,7 @@ kx wait [OPTIONS] <index>... [kubectl flags]
 | `-o, --output string` | Output format, as kubectl takes it; kubectl's output is printed, and kx's own lines go to stderr |
 | `--timeout duration` | How long to wait for every index together (default 30s); 0 checks once |
 
-## Options for kubectl
+## Passthrough
 
 | Option | Description |
 |---|---|

@@ -31,7 +31,7 @@ kx cp [OPTIONS] <src> <dest> [kubectl flags]
 | `--no-preserve` | Don't preserve the copied file/directory's ownership and permissions |
 | `--retries int` | Number of retries on a copy failure (0 disables) |
 
-## Options for kubectl
+## Passthrough
 
 | Option | Description |
 |---|---|
