@@ -224,6 +224,38 @@ func TestRegisterKubectlFlagPreservesDeprecatedShorthand(t *testing.T) {
 	}
 }
 
+func TestRegisterKubectlFlagDoesNotDeprecateDifferentKxShorthand(t *testing.T) {
+	const warning = "use --filename instead"
+	source := kubectlflags.Flag{
+		Name:                "filename",
+		Shorthand:           "f",
+		Type:                "string",
+		Usage:               "file to read",
+		ShorthandDeprecated: warning,
+	}
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.StringP("filename", "x", "", "kx option")
+	args := &kubectlArgs{definedBy: map[string][]string{}}
+	registerKubectlFlag(flags, args, source, kubectlFlagCommand)
+
+	flag := flags.Lookup("filename")
+	if flag.Shorthand != "x" {
+		t.Fatalf("shorthand = %q, want kx's -x", flag.Shorthand)
+	}
+	if flag.ShorthandDeprecated != "" {
+		t.Fatalf("ShorthandDeprecated = %q, want empty for kx's distinct shorthand", flag.ShorthandDeprecated)
+	}
+
+	var output strings.Builder
+	flags.SetOutput(&output)
+	if err := flags.Parse([]string{"-x", "input.yaml"}); err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if strings.Contains(output.String(), warning) {
+		t.Errorf("parsing kx's -x emitted kubectl's deprecation warning: %q", output.String())
+	}
+}
+
 // kubectl's flags are listed apart from kx's, and its thirty global flags are
 // named rather than listed.
 func TestGetHelpListsKubectlFlagsApart(t *testing.T) {

@@ -197,7 +197,9 @@ func registerKubectlFlag(flags *pflag.FlagSet, args *kubectlArgs, flag kubectlfl
 		existing.Value = value
 		existing.NoOptDefVal = flag.NoOptDefVal
 		existing.DefValue = ""
-		existing.ShorthandDeprecated = flag.ShorthandDeprecated
+		if existing.Shorthand == flag.Shorthand {
+			existing.ShorthandDeprecated = flag.ShorthandDeprecated
+		}
 		return
 	}
 	shorthand := flag.Shorthand
