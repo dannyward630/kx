@@ -43,7 +43,7 @@ kx get [OPTIONS] <resource> [index]... [kubectl flags]
 | `-w, --watch` | Redraw the listing live as resources change; a watch never completes, so results are not indexed |
 | `-y, --yes` | Skip the confirmation prompt for a namespace-wide --decode |
 
-## kubectl options
+## Passthrough options
 
 | Option | Description |
 |---|---|

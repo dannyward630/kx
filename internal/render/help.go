@@ -283,7 +283,7 @@ func (r *Renderer) CommandHelp(help CommandHelp) {
 
 	r.itemBlock("Arguments", help.Args, commandNameWidth)
 	r.itemBlock("Options", help.Options, commandNameWidth)
-	r.itemBlock("kubectl options", help.Kubectl, commandNameWidth)
+	r.itemBlock("Passthrough options", help.Kubectl, commandNameWidth)
 	r.itemBlock("Global options", help.Global, commandNameWidth)
 
 	if len(help.Aliases) > 0 {

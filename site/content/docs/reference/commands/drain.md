@@ -37,7 +37,7 @@ kx drain [OPTIONS] <index> [kubectl flags]
 | `--timeout duration` | Give up waiting after this long |
 | `-y, --yes` | Skip the confirmation prompt |
 
-## kubectl options
+## Passthrough options
 
 | Option | Description |
 |---|---|

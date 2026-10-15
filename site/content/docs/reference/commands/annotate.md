@@ -32,7 +32,7 @@ kx annotate [OPTIONS] <index> [key=value...] [kubectl flags]
 | `--overwrite` | Allow replacing an existing key |
 | `--remove strings` | Key to remove (repeatable) |
 
-## kubectl options
+## Passthrough options
 
 | Option | Description |
 |---|---|

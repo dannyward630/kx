@@ -22,7 +22,7 @@ kx describe [OPTIONS] <index>... [kubectl flags]
 |---|---|
 | `<index>...` | Row number from the current listing, or @name for a mark; kx state or kx mark shows them |
 
-## kubectl options
+## Passthrough options
 
 | Option | Description |
 |---|---|

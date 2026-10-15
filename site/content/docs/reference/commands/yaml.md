@@ -30,7 +30,7 @@ kx yaml [OPTIONS] <index>... [kubectl flags]
 |---|---|
 | `--show string` | Comma-separated fields to display (e.g. metadata,spec) |
 
-## kubectl options
+## Passthrough options
 
 | Option | Description |
 |---|---|

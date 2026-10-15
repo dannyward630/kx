@@ -32,7 +32,7 @@ kx delete [OPTIONS] <index>... [kubectl flags]
 | `-o, --output string` | Output format, as kubectl takes it; kubectl's output is printed, and kx's own lines go to stderr |
 | `-y, --yes` | Skip the confirmation prompt |
 
-## kubectl options
+## Passthrough options
 
 | Option | Description |
 |---|---|
