@@ -391,14 +391,63 @@ func trailingCommand(cmd *cobra.Command) bool {
 // container). The first positional is always an index, so a non-numeric one
 // is reported rather than quietly forwarded.
 func indexArgv(cmd *cobra.Command, args []string, recorded *kubectlArgs) (indexes, extra []string, err error) {
-	positional, forward := kubectlArgv(cmd, args, recorded)
-	indexes, stray := splitLeadingIndexes(positional)
-	if len(indexes) == 0 {
-		if len(positional) > 0 {
-			return nil, nil, fmt.Errorf(
-				"Invalid value for 'indexes': '%s' is not a valid int.", positional[0])
-		}
-		return nil, nil, requiredArgsError(cmd)
+	indexes, stray, forward, err := splitIndexArgv(cmd, args, recorded)
+	if err != nil {
+		return nil, nil, err
 	}
 	return indexes, append(stray[:len(stray):len(stray)], forward...), nil
+}
+
+// splitIndexArgv is indexArgv with the positionals after the indexes kept
+// apart from kubectl's flags, for a command that refuses them (refuseStray).
+func splitIndexArgv(cmd *cobra.Command, args []string, recorded *kubectlArgs) (indexes, stray, forward []string, err error) {
+	positional, forward := kubectlArgv(cmd, args, recorded)
+	indexes, stray = splitLeadingIndexes(positional)
+	if len(indexes) == 0 {
+		if len(positional) > 0 {
+			return nil, nil, nil, fmt.Errorf(
+				"Invalid value for 'indexes': '%s' is not a valid int.", positional[0])
+		}
+		return nil, nil, nil, requiredArgsError(cmd)
+	}
+	return indexes, stray, forward, nil
+}
+
+// refuseStray refuses a positional left over after the arguments a mutating
+// command takes. Forwarded, kubectl reads it as one more resource to act on —
+// kx delete 3 web deletes web too — which neither the confirm prompt nor the
+// report ever named. A flag whose value is optional, given bare (--cascade
+// orphan), leaves its intended value here, so the refusal says how to attach
+// it. Anything after -- is still forwarded unread.
+func refuseStray(cmd *cobra.Command, recorded *kubectlArgs, stray []string) error {
+	if len(stray) == 0 {
+		return nil
+	}
+	word := stray[0]
+	if flag := bareOptionalValue(cmd, recorded); flag != "" {
+		return fmt.Errorf(
+			"'%s' isn't an argument of %s. If it is %s's value, attach it: '%s=%s'.",
+			word, cmd.CommandPath(), flag, flag, word)
+	}
+	return fmt.Errorf(
+		"'%s' isn't an argument of %s — kubectl would act on it as another resource, "+
+			"one kx never named. See '%s --help' for usage.",
+		word, cmd.CommandPath(), cmd.CommandPath())
+}
+
+// bareOptionalValue is the last kubectl flag recorded in its bare form that
+// takes a value when one is attached (--cascade, --dry-run), or "" when none
+// was. A boolean's bare form is complete, so it is not one.
+func bareOptionalValue(cmd *cobra.Command, recorded *kubectlArgs) string {
+	for i := len(recorded.tokens) - 1; i >= 0; i-- {
+		token := recorded.tokens[i]
+		if strings.Contains(token, "=") {
+			continue
+		}
+		flag := cmd.Flags().Lookup(strings.TrimPrefix(token, "--"))
+		if flag != nil && flag.NoOptDefVal != "" && flag.Value.Type() != "bool" {
+			return token
+		}
+	}
+	return ""
 }

@@ -514,8 +514,11 @@ func newDeleteCommand(services Services) *cobra.Command {
 		if yes {
 			installAgentIndexNotice(services)
 		}
-		indexArgs, extra, err := indexArgv(cmd, args, kubectlFlags)
+		indexArgs, stray, extra, err := splitIndexArgv(cmd, args, kubectlFlags)
 		if err != nil {
+			return err
+		}
+		if err := refuseStray(cmd, kubectlFlags, stray); err != nil {
 			return err
 		}
 		resolved, err := resolveRefs(services.State, "indexes", indexArgs)
@@ -576,7 +579,10 @@ func newScaleCommand(services Services) *cobra.Command {
 			return fmt.Errorf(
 				"Invalid value for 'replicas': '%s' is not a valid int.", positional[1])
 		}
-		extra := append(positional[2:len(positional):len(positional)], forward...)
+		if err := refuseStray(cmd, kubectlFlags, positional[2:]); err != nil {
+			return err
+		}
+		extra := forward
 		if hasFlag(extra, "--replicas", "") {
 			return fmt.Errorf(
 				"'--replicas' cannot be combined with a replica count — kx builds " +
@@ -649,7 +655,10 @@ func newRolloutCommand(services Services) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		extra := append(positional[2:len(positional):len(positional)], forward...)
+		if err := refuseStray(cmd, kubectlFlags, positional[2:]); err != nil {
+			return err
+		}
+		extra := forward
 		_, namespace, kind, err := services.State.Resolve(ref)
 		if err != nil {
 			return err
