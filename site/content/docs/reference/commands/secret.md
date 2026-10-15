@@ -40,7 +40,7 @@ kx secret [OPTIONS] [index]... [kubectl flags]
 | `-w, --watch` | Redraw the listing live as resources change; a watch never completes, so results are not indexed |
 | `-y, --yes` | Skip the confirmation prompt for a namespace-wide --decode |
 
-## Passthrough
+## Passthrough options
 
 | Option | Description |
 |---|---|

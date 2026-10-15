@@ -36,7 +36,7 @@ kx debug [OPTIONS] <index> [kubectl flags] [-- command...]
 | `--image string` | Image for the debug container (default: the debug_image config key) |
 | `--target string` | Container to share a process namespace with, for a pod with several; not for nodes |
 
-## Passthrough
+## Passthrough options
 
 | Option | Description |
 |---|---|

@@ -37,7 +37,7 @@ kx top [OPTIONS] [resource] [kubectl flags]
 | `--out string` | Write the HTML report to this file instead of serving it in a browser |
 | `--port int` | Port to serve the HTML report on; 0 picks a free one |
 
-## Passthrough
+## Passthrough options
 
 | Option | Description |
 |---|---|
